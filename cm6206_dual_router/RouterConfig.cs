@@ -50,6 +50,12 @@ public sealed class RouterConfig
     [JsonPropertyName("useCenterChannel")]
     public bool UseCenterChannel { get; set; } = false;
 
+    // Per-output-channel trims (dB). Order is WAVEFORMATEXTENSIBLE 7.1:
+    // FL, FR, FC, LFE, BL, BR, SL, SR
+    // If null, defaults to 0 dB on all channels.
+    [JsonPropertyName("channelGainsDb")]
+    public float[]? ChannelGainsDb { get; set; } = null;
+
     [JsonPropertyName("latencyMs")]
     public int LatencyMs { get; set; } = 50;
 
@@ -91,6 +97,9 @@ public sealed class RouterConfig
             throw new InvalidOperationException("latencyMs is out of range (10..500)");
         if (ShakerHighPassHz <= 0 || ShakerLowPassHz <= 0 || ShakerHighPassHz >= ShakerLowPassHz)
             throw new InvalidOperationException("shakerHighPassHz must be >0 and < shakerLowPassHz");
+
+        if (ChannelGainsDb is not null && ChannelGainsDb.Length != 8)
+            throw new InvalidOperationException("channelGainsDb must be an array of 8 floats (FL,FR,FC,LFE,BL,BR,SL,SR)");
 
         if (MusicHighPassHz is not null && MusicLowPassHz is not null)
         {

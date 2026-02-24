@@ -20,5 +20,16 @@
   "sideGainDb": 0.0,
 
   "useCenterChannel": false,
-  "latencyMs": 50
+  "latencyMs": 50,
+
+  "channelGainsDb": [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+  ]
 }

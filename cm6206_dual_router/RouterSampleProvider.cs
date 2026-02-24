@@ -22,6 +22,8 @@ public sealed class RouterSampleProvider : ISampleProvider
     private readonly float _rearGain;
     private readonly float _sideGain;
 
+    private readonly float[] _channelGains;
+
     private readonly BiQuadFilter _shakerHpL;
     private readonly BiQuadFilter _shakerHpR;
     private readonly BiQuadFilter _shakerLpL;
@@ -53,6 +55,16 @@ public sealed class RouterSampleProvider : ISampleProvider
         _lfeGain = DbToGain(config.LfeGainDb);
         _rearGain = DbToGain(config.RearGainDb);
         _sideGain = DbToGain(config.SideGainDb);
+
+        _channelGains = new float[8];
+        if (config.ChannelGainsDb is null)
+        {
+            for (var i = 0; i < 8; i++) _channelGains[i] = 1.0f;
+        }
+        else
+        {
+            for (var i = 0; i < 8; i++) _channelGains[i] = DbToGain(config.ChannelGainsDb[i]);
+        }
 
         _shakerHpL = BiQuadFilter.HighPassFilter(_sampleRate, config.ShakerHighPassHz, 0.707f);
         _shakerHpR = BiQuadFilter.HighPassFilter(_sampleRate, config.ShakerHighPassHz, 0.707f);
@@ -150,14 +162,14 @@ public sealed class RouterSampleProvider : ISampleProvider
                 var outBase = offset + (frame * outChannels);
 
                 // FL, FR, FC, LFE, BL, BR, SL, SR
-                buffer[outBase + 0] = Clamp(frontL);
-                buffer[outBase + 1] = Clamp(frontR);
-                buffer[outBase + 2] = Clamp(center);
-                buffer[outBase + 3] = Clamp(lfe);
-                buffer[outBase + 4] = Clamp(backL);
-                buffer[outBase + 5] = Clamp(backR);
-                buffer[outBase + 6] = Clamp(sideL);
-                buffer[outBase + 7] = Clamp(sideR);
+                buffer[outBase + 0] = Clamp(frontL * _channelGains[0]);
+                buffer[outBase + 1] = Clamp(frontR * _channelGains[1]);
+                buffer[outBase + 2] = Clamp(center * _channelGains[2]);
+                buffer[outBase + 3] = Clamp(lfe * _channelGains[3]);
+                buffer[outBase + 4] = Clamp(backL * _channelGains[4]);
+                buffer[outBase + 5] = Clamp(backR * _channelGains[5]);
+                buffer[outBase + 6] = Clamp(sideL * _channelGains[6]);
+                buffer[outBase + 7] = Clamp(sideR * _channelGains[7]);
             }
 
             return framesRequested * outChannels;

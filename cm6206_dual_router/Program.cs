@@ -1,4 +1,5 @@
 using System.CommandLine;
+using System.Windows.Forms;
 
 namespace Cm6206DualRouter;
 
@@ -15,15 +16,27 @@ internal static class Program
             name: "--list-devices",
             description: "List available playback devices and exit");
 
+        var uiOption = new Option<bool>(
+            name: "--ui",
+            description: "Launch the tabbed UI (device selection + per-channel gains)");
+
         var root = new RootCommand("CM6206 Dual Virtual Router (2 virtual outputs -> 1 CM6206 7.1)");
         root.AddOption(configOption);
         root.AddOption(listDevicesOption);
+        root.AddOption(uiOption);
 
-        root.SetHandler((configPath, listDevices) =>
+        root.SetHandler((configPath, listDevices, ui) =>
         {
             if (listDevices)
             {
                 DeviceHelper.PrintRenderDevices();
+                return;
+            }
+
+            if (ui)
+            {
+                ApplicationConfiguration.Initialize();
+                Application.Run(new RouterMainForm(configPath));
                 return;
             }
 
@@ -45,7 +58,7 @@ internal static class Program
 
             router.WaitUntilStopped();
         },
-        configOption, listDevicesOption);
+        configOption, listDevicesOption, uiOption);
 
         return root.Invoke(args);
     }

@@ -39,3 +39,8 @@ Note: this folder is intentionally **not committed** to git (see `.gitignore`).
 ## Requirements
 - For `cm6206_dual_router/`: install **.NET 8 SDK (x64)** from https://dotnet.microsoft.com/download/dotnet/8.0
 
+## Prebuilt EXE (GitHub Actions)
+- This repo includes a GitHub Actions workflow that publishes a self-contained `win-x64` single-file build.
+- On GitHub: go to **Actions** → latest **build-windows** run → download artifact `cm6206_dual_router_win-x64`.
+- If you create a tag like `v1.0.0`, the workflow also attaches the files to a GitHub Release.
+

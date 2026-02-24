@@ -45,6 +45,12 @@ cd "cm6206_dual_router"
 dotnet run -c Release -- --config router.json
 ```
 
+### UI mode (tabs + per-channel adjustment)
+```powershell
+cd "cm6206_dual_router"
+dotnet run -c Release -- --ui --config router.json
+```
+
 Or run the built exe:
 - `bin\\Release\\net8.0-windows\\Cm6206DualRouter.exe --config router.json`
 
@@ -59,6 +65,7 @@ Or run the built exe:
 - `rearGainDb`, `sideGainDb`, `lfeGainDb`: per-group trims for shaker distribution.
 - `useCenterChannel`: optional mono feed to center.
 - `latencyMs`: output latency (lower = snappier, higher = safer).
+- `channelGainsDb`: per-channel trims in dB for FL,FR,FC,LFE,BL,BR,SL,SR.
 
 ## Troubleshooting
 - If you hear feedback/echo: don’t route the CM6206 output back into one of the input virtual devices.

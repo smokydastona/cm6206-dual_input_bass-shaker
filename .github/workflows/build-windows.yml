@@ -1,0 +1,54 @@
+name: build-windows
+
+on:
+  push:
+    branches: [ "main" ]
+    tags: [ "v*" ]
+  pull_request:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Restore
+        run: dotnet restore "cm6206_dual_router/Cm6206DualRouter.csproj"
+
+      - name: Build
+        run: dotnet build "cm6206_dual_router/Cm6206DualRouter.csproj" -c Release --no-restore
+
+      - name: Publish (self-contained single file)
+        run: >
+          dotnet publish "cm6206_dual_router/Cm6206DualRouter.csproj"
+          -c Release
+          -r win-x64
+          --self-contained true
+          /p:PublishSingleFile=true
+          /p:IncludeNativeLibrariesForSelfExtract=true
+          /p:PublishReadyToRun=true
+          /p:DebugType=None
+          /p:DebugSymbols=false
+          -o "artifacts/cm6206_dual_router_win-x64"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cm6206_dual_router_win-x64
+          path: artifacts/cm6206_dual_router_win-x64/
+
+      - name: Create GitHub Release (tags)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/cm6206_dual_router_win-x64/**
