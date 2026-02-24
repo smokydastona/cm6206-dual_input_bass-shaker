@@ -59,6 +59,10 @@ public sealed class RouterConfig
     [JsonPropertyName("calibrationAutoStep")]
     public bool CalibrationAutoStep { get; set; } = false;
 
+    // One of: Manual, IdentifySine, LevelPink, AlternateSinePink
+    [JsonPropertyName("calibrationPreset")]
+    public string CalibrationPreset { get; set; } = "Manual";
+
     [JsonPropertyName("calibrationStepMs")]
     public int CalibrationStepMs { get; set; } = 2000;
 
@@ -125,6 +129,10 @@ public sealed class RouterConfig
 
         if (CalibrationStepMs < 250 || CalibrationStepMs > 30000)
             throw new InvalidOperationException("calibrationStepMs is out of range (250..30000)");
+
+        var preset = (CalibrationPreset ?? "Manual").Trim();
+        if (preset is not ("Manual" or "IdentifySine" or "LevelPink" or "AlternateSinePink"))
+            throw new InvalidOperationException("calibrationPreset must be one of: Manual, IdentifySine, LevelPink, AlternateSinePink");
         if (ShakerHighPassHz <= 0 || ShakerLowPassHz <= 0 || ShakerHighPassHz >= ShakerLowPassHz)
             throw new InvalidOperationException("shakerHighPassHz must be >0 and < shakerLowPassHz");
 

@@ -23,6 +23,7 @@
   "useExclusiveMode": false,
   "enableVoicePrompts": true,
   "calibrationAutoStep": false,
+  "calibrationPreset": "Manual",
   "calibrationStepMs": 2000,
   "calibrationLoop": true,
   "latencyMs": 50,

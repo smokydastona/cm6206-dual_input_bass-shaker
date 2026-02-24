@@ -44,6 +44,7 @@ public sealed class RouterMainForm : Form
     private readonly ComboBox _testTypeCombo = new() { DropDownStyle = ComboBoxStyle.DropDownList };
     private readonly NumericUpDown _testFreq = new() { Minimum = 10, Maximum = 20000, DecimalPlaces = 0, Increment = 10 };
     private readonly NumericUpDown _testLevelDb = new() { Minimum = -60, Maximum = 0, DecimalPlaces = 1, Increment = 1 };
+    private readonly ComboBox _testPresetCombo = new() { DropDownStyle = ComboBoxStyle.DropDownList };
     private readonly CheckBox _testVoicePrompts = new() { Text = "Voice prompts", AutoSize = true };
     private readonly CheckBox _testAutoStep = new() { Text = "Auto-step channels", AutoSize = true };
     private readonly CheckBox _testLoop = new() { Text = "Loop", AutoSize = true };
@@ -52,6 +53,7 @@ public sealed class RouterMainForm : Form
     private readonly Button _testStopButton = new() { Text = "Stop test", Enabled = false };
 
     private readonly System.Windows.Forms.Timer _autoStepTimer = new();
+    private bool _alternateIsSine = true;
 
     private static readonly string[] ChannelNames =
     [
@@ -280,6 +282,15 @@ public sealed class RouterMainForm : Form
         _testTypeCombo.Items.AddRange(new object[] { ToneType.Sine, ToneType.PinkNoise, ToneType.WhiteNoise });
         _testTypeCombo.SelectedItem = ToneType.Sine;
 
+        _testPresetCombo.Items.AddRange(new object[]
+        {
+            "Manual",
+            "Identify (Sine)",
+            "Level match (Pink)",
+            "Alternate (Sine/Pink per step)"
+        });
+        _testPresetCombo.SelectedIndex = 0;
+
         _testFreq.Value = 440;
         _testLevelDb.Value = -18;
         _testStepMs.Value = 2000;
@@ -288,33 +299,38 @@ public sealed class RouterMainForm : Form
         layout.Controls.Add(new Label { Text = "Channel", AutoSize = true }, 0, 0);
         layout.Controls.Add(_testChannelCombo, 1, 0);
 
-        layout.Controls.Add(new Label { Text = "Signal", AutoSize = true }, 0, 1);
-        layout.Controls.Add(_testTypeCombo, 1, 1);
+        layout.Controls.Add(new Label { Text = "Preset", AutoSize = true }, 0, 1);
+        layout.Controls.Add(_testPresetCombo, 1, 1);
 
-        layout.Controls.Add(new Label { Text = "Frequency (Hz)", AutoSize = true }, 0, 2);
-        layout.Controls.Add(_testFreq, 1, 2);
+        layout.Controls.Add(new Label { Text = "Signal", AutoSize = true }, 0, 2);
+        layout.Controls.Add(_testTypeCombo, 1, 2);
 
-        layout.Controls.Add(new Label { Text = "Level (dB)", AutoSize = true }, 0, 3);
-        layout.Controls.Add(_testLevelDb, 1, 3);
+        layout.Controls.Add(new Label { Text = "Frequency (Hz)", AutoSize = true }, 0, 3);
+        layout.Controls.Add(_testFreq, 1, 3);
+
+        layout.Controls.Add(new Label { Text = "Level (dB)", AutoSize = true }, 0, 4);
+        layout.Controls.Add(_testLevelDb, 1, 4);
 
         var optionsRow = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, AutoSize = true };
         optionsRow.Controls.Add(_testVoicePrompts);
         optionsRow.Controls.Add(_testAutoStep);
         optionsRow.Controls.Add(_testLoop);
-        layout.Controls.Add(optionsRow, 1, 4);
+        layout.Controls.Add(optionsRow, 1, 5);
 
         var stepRow = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, AutoSize = true };
         stepRow.Controls.Add(new Label { Text = "Step (ms)", AutoSize = true, Padding = new Padding(0, 6, 0, 0) });
         stepRow.Controls.Add(_testStepMs);
-        layout.Controls.Add(stepRow, 1, 5);
+        layout.Controls.Add(stepRow, 1, 6);
 
         var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, AutoSize = true };
         buttons.Controls.Add(_testStartButton);
         buttons.Controls.Add(_testStopButton);
-        layout.Controls.Add(buttons, 1, 6);
+        layout.Controls.Add(buttons, 1, 7);
 
         _testStartButton.Click += (_, _) => StartTest();
         _testStopButton.Click += (_, _) => StopTest();
+
+        _testPresetCombo.SelectedIndexChanged += (_, _) => ApplyCalibrationPresetToControls();
 
         _testChannelCombo.SelectedIndexChanged += (_, _) =>
         {
@@ -386,6 +402,16 @@ public sealed class RouterMainForm : Form
         _testAutoStep.Checked = _config.CalibrationAutoStep;
         _testStepMs.Value = _config.CalibrationStepMs;
         _testLoop.Checked = _config.CalibrationLoop;
+
+        _testPresetCombo.SelectedIndex = _config.CalibrationPreset switch
+        {
+            "IdentifySine" => 1,
+            "LevelPink" => 2,
+            "AlternateSinePink" => 3,
+            _ => 0
+        };
+
+        ApplyCalibrationPresetToControls();
     }
 
     private void SaveConfigFromControls()
@@ -407,6 +433,14 @@ public sealed class RouterMainForm : Form
         _config.CalibrationAutoStep = _testAutoStep.Checked;
         _config.CalibrationStepMs = (int)_testStepMs.Value;
         _config.CalibrationLoop = _testLoop.Checked;
+
+        _config.CalibrationPreset = _testPresetCombo.SelectedIndex switch
+        {
+            1 => "IdentifySine",
+            2 => "LevelPink",
+            3 => "AlternateSinePink",
+            _ => "Manual"
+        };
 
         var channel = new float[8];
         for (var i = 0; i < 8; i++)
@@ -518,6 +552,65 @@ public sealed class RouterMainForm : Form
 
         // This triggers SelectedIndexChanged handler which updates tone channel + speaks (if enabled).
         _testChannelCombo.SelectedIndex = next;
+
+        if (_tonePlayer is null)
+            return;
+
+        // Optional: alternate between sine and pink noise each step.
+        if (_testPresetCombo.SelectedIndex == 3)
+        {
+            _alternateIsSine = !_alternateIsSine;
+            var nextType = _alternateIsSine ? ToneType.Sine : ToneType.PinkNoise;
+            _testTypeCombo.SelectedItem = nextType;
+            _tonePlayer.SetType(nextType);
+
+            if (nextType == ToneType.Sine)
+            {
+                _tonePlayer.SetFrequency((float)_testFreq.Value);
+            }
+        }
+    }
+
+    private void ApplyCalibrationPresetToControls()
+    {
+        // 0 Manual
+        // 1 Identify (Sine)
+        // 2 Level match (Pink)
+        // 3 Alternate
+        switch (_testPresetCombo.SelectedIndex)
+        {
+            case 1:
+                _testTypeCombo.SelectedItem = ToneType.Sine;
+                _testTypeCombo.Enabled = false;
+                _testFreq.Enabled = true;
+                break;
+            case 2:
+                _testTypeCombo.SelectedItem = ToneType.PinkNoise;
+                _testTypeCombo.Enabled = false;
+                _testFreq.Enabled = false;
+                break;
+            case 3:
+                _alternateIsSine = true;
+                _testTypeCombo.SelectedItem = ToneType.Sine;
+                _testTypeCombo.Enabled = false;
+                _testFreq.Enabled = true;
+                break;
+            default:
+                _testTypeCombo.Enabled = true;
+                _testFreq.Enabled = ((ToneType)_testTypeCombo.SelectedItem!) == ToneType.Sine;
+                break;
+        }
+
+        _testTypeCombo.SelectedIndexChanged -= TestTypeComboOnSelectedIndexChanged;
+        _testTypeCombo.SelectedIndexChanged += TestTypeComboOnSelectedIndexChanged;
+    }
+
+    private void TestTypeComboOnSelectedIndexChanged(object? sender, EventArgs e)
+    {
+        var t = (ToneType)_testTypeCombo.SelectedItem!;
+        _testFreq.Enabled = t == ToneType.Sine;
+        if (_tonePlayer is not null)
+            _tonePlayer.SetType(t);
     }
 
     private void StartRouter()

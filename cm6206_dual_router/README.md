@@ -58,6 +58,7 @@ UI tabs:
 - **Calibration**: play test tone/noise per channel to verify wiring & mapping
   - Optional **Voice prompts** checkbox to speak the channel name
   - Optional **Auto-step channels** mode to cycle FL→…→SR automatically
+  - **Preset** dropdown can lock signal to Sine/Pink or alternate Sine↔Pink per step
 
 Or run the built exe:
 - `bin\\Release\\net8.0-windows\\Cm6206DualRouter.exe --config router.json`
