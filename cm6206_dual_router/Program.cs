@@ -5,6 +5,7 @@ namespace Cm6206DualRouter;
 
 internal static class Program
 {
+    [STAThread]
     public static int Main(string[] args)
     {
         // Double-click friendly: with no args, launch the UI instead of running headless
