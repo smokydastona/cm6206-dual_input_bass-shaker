@@ -1,21 +1,32 @@
-# CM6206 dual-input bass shaker router
+# CM6206 dual-input router (Music + Shaker → one 7.1 output)
 
-This repo provides a simple Windows app that:
-- Captures **two Windows playback devices** (your “Music” + “Shaker” virtual outputs) via WASAPI loopback.
-- Routes/mixes them into **one CM6206 7.1 output**.
-- Includes a **tabbed UI** with **per-channel trims** (FL/FR/FC/LFE/BL/BR/SL/SR).
-- Adds **per-channel remap/mute/solo/invert** plus basic **Profiles** for quick switching.
-- Includes **calibration signals** (sine/pink/white + sweep), **drag-to-remap** visual mapping, and **round-trip latency measurement** (with a mic/line-in loopback).
+This repo contains a Windows app for the common “I want two independent PC outputs, but only one physical 7.1 USB adapter” problem:
+- Captures **two Windows playback endpoints** (typically two virtual devices) via **WASAPI loopback**:
+	- Music (full-range)
+	- Shaker (bass-only)
+- Mixes/routes them into **one physical 7.1 output** (e.g. CM6206).
 
-## Project
+It’s designed to avoid driver/registry hacks and to not fight Windows default-device behavior. You choose your endpoints and the app routes audio.
+
+## What’s included
+- WinForms UI with tabs for **Devices**, **DSP**, **Channels**, **Calibration**.
+- Per-channel: **trim**, **mute**, **solo**, **invert**, and **remap**.
+- Visual **drag-to-remap** 7.1 layout.
+- Calibration signals: sine, pink/white noise, and sweep (with optional voice prompts + auto-step).
+- Round-trip latency measurement (requires a capture device + a physical loopback).
+- Profiles (separate JSON files) + optional per-app auto-switch by running EXE name.
+- Output format helper: **shows Windows mix format**, **warns about Shared-mode sample rate**, and can **probe/blacklist Exclusive-mode rates**.
+
+## Where the app lives
 - App + UI + config: `cm6206_dual_router/`
-- Optional local reference (not in git): `cm6206_extracted/` (vendor bundle)
+- Vendor bundle reference (optional / local): `cm6206_extracted/`
 
-## Requirements (local build)
-- Install **.NET 8 SDK (x64)**: https://dotnet.microsoft.com/download/dotnet/8.0
+For full usage details, see `cm6206_dual_router/README.md`.
 
 ## Prebuilt EXE (GitHub Actions)
 - This repo publishes a self-contained `win-x64` single-file build.
 - On GitHub: **Actions** → latest **build-windows** → download artifact `cm6206_dual_router_win-x64`.
-- If you create a tag like `v1.0.0`, the workflow attaches the build to a GitHub Release.
+
+## Local build (optional)
+- Install **.NET 8 SDK (x64)**: https://dotnet.microsoft.com/download/dotnet/8.0
 

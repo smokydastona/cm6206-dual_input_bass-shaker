@@ -13,13 +13,16 @@ public sealed class TonePlayer : IDisposable
     {
         _outputDevice = DeviceHelper.GetRenderDeviceByFriendlyName(config.OutputRenderDevice);
 
-        var format = WaveFormatFactory.Create7Point1Float(config.SampleRate);
+        var negotiation = OutputFormatNegotiator.Negotiate(config, _outputDevice);
+        var effective = negotiation.EffectiveConfig;
+
+        var format = WaveFormatFactory.Create7Point1Float(effective.SampleRate);
         _tone = new ToneSampleProvider(format);
 
         var waveProvider = new SampleToWaveProvider(_tone);
 
-        var shareMode = config.UseExclusiveMode ? AudioClientShareMode.Exclusive : AudioClientShareMode.Shared;
-        _output = new WasapiOut(_outputDevice, shareMode, true, config.LatencyMs);
+        var shareMode = effective.UseExclusiveMode ? AudioClientShareMode.Exclusive : AudioClientShareMode.Shared;
+        _output = new WasapiOut(_outputDevice, shareMode, true, effective.LatencyMs);
         _output.Init(waveProvider);
     }
 

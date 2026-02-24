@@ -7,7 +7,10 @@ namespace Cm6206DualRouter;
 
 public sealed class WasapiDualRouter : IDisposable
 {
-    private readonly RouterConfig _config;
+    private RouterConfig _config;
+
+    public int EffectiveSampleRate => _config.SampleRate;
+    public string? FormatWarning { get; }
 
     private readonly MMDevice _musicDevice;
     private readonly MMDevice _shakerDevice;
@@ -31,6 +34,11 @@ public sealed class WasapiDualRouter : IDisposable
         _musicDevice = DeviceHelper.GetRenderDeviceByFriendlyName(config.MusicInputRenderDevice);
         _shakerDevice = DeviceHelper.GetRenderDeviceByFriendlyName(config.ShakerInputRenderDevice);
         _outputDevice = DeviceHelper.GetRenderDeviceByFriendlyName(config.OutputRenderDevice);
+
+        // Negotiate effective format (shared uses mix format; exclusive can fall back).
+        var negotiation = OutputFormatNegotiator.Negotiate(_config, _outputDevice);
+        _config = negotiation.EffectiveConfig;
+        FormatWarning = negotiation.Warning;
 
         _musicCapture = new WasapiLoopbackCapture(_musicDevice);
         _shakerCapture = new WasapiLoopbackCapture(_shakerDevice);
@@ -62,22 +70,22 @@ public sealed class WasapiDualRouter : IDisposable
         _musicCapture.RecordingStopped += (_, __) => Stop();
         _shakerCapture.RecordingStopped += (_, __) => Stop();
 
-        var outputFormat = WaveFormatFactory.Create7Point1Float(config.SampleRate);
+        var outputFormat = WaveFormatFactory.Create7Point1Float(_config.SampleRate);
 
         // Build per-input pipelines
-        var musicStereo = BuildStereoProvider(_musicBuffer.ToSampleProvider(), config.SampleRate);
-        var shakerStereo = BuildStereoProvider(_shakerBuffer.ToSampleProvider(), config.SampleRate);
+        var musicStereo = BuildStereoProvider(_musicBuffer.ToSampleProvider(), _config.SampleRate);
+        var shakerStereo = BuildStereoProvider(_shakerBuffer.ToSampleProvider(), _config.SampleRate);
 
         var router = new RouterSampleProvider(
             musicStereo,
             shakerStereo,
             outputFormat,
-            config);
+            _config);
 
         var waveProvider = new SampleToWaveProvider(router);
 
-        var shareMode = config.UseExclusiveMode ? AudioClientShareMode.Exclusive : AudioClientShareMode.Shared;
-        _output = new WasapiOut(_outputDevice, shareMode, true, config.LatencyMs);
+        var shareMode = _config.UseExclusiveMode ? AudioClientShareMode.Exclusive : AudioClientShareMode.Shared;
+        _output = new WasapiOut(_outputDevice, shareMode, true, _config.LatencyMs);
         _output.Init(waveProvider);
     }
 

@@ -21,6 +21,10 @@ public sealed class RouterConfig
     [JsonPropertyName("sampleRate")]
     public int SampleRate { get; set; } = 48000;
 
+    // Optional: exclusive-mode sample rates to avoid (some adapters glitch at 192kHz, etc.).
+    [JsonPropertyName("blacklistedSampleRates")]
+    public int[]? BlacklistedSampleRates { get; set; } = null;
+
     [JsonPropertyName("outputChannels")]
     public int OutputChannels { get; set; } = 8;
 
@@ -129,6 +133,15 @@ public sealed class RouterConfig
             throw new InvalidOperationException("outputRenderDevice is required");
         if (SampleRate < 8000 || SampleRate > 384000)
             throw new InvalidOperationException("sampleRate is out of range");
+
+        if (BlacklistedSampleRates is not null)
+        {
+            foreach (var sr in BlacklistedSampleRates)
+            {
+                if (sr < 8000 || sr > 384000)
+                    throw new InvalidOperationException("blacklistedSampleRates contains an out-of-range value");
+            }
+        }
         if (OutputChannels != 8)
             throw new InvalidOperationException("This build currently expects outputChannels=8 (7.1)");
         if (LatencyMs < 10 || LatencyMs > 500)
@@ -169,5 +182,17 @@ public sealed class RouterConfig
             if (MusicHighPassHz <= 0 || MusicLowPassHz <= 0 || MusicHighPassHz >= MusicLowPassHz)
                 throw new InvalidOperationException("musicHighPassHz must be >0 and < musicLowPassHz");
         }
+    }
+
+    public RouterConfig Clone()
+    {
+        var c = (RouterConfig)MemberwiseClone();
+        c.BlacklistedSampleRates = BlacklistedSampleRates?.ToArray();
+        c.ChannelGainsDb = ChannelGainsDb?.ToArray();
+        c.OutputChannelMap = OutputChannelMap?.ToArray();
+        c.ChannelMute = ChannelMute?.ToArray();
+        c.ChannelSolo = ChannelSolo?.ToArray();
+        c.ChannelInvert = ChannelInvert?.ToArray();
+        return c;
     }
 }

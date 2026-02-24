@@ -37,8 +37,17 @@ public sealed class RouterMainForm : Form
 
     private readonly NumericUpDown _latencyMs = new() { Minimum = 10, Maximum = 500, DecimalPlaces = 0, Increment = 5 };
 
+    private readonly ComboBox _sampleRateCombo = new() { DropDownStyle = ComboBoxStyle.DropDownList };
+
     private readonly CheckBox _useCenter = new() { Text = "Use Center channel" };
     private readonly CheckBox _useExclusiveMode = new() { Text = "Use WASAPI Exclusive mode (if supported)" };
+
+    private readonly Label _mixFormatLabel = new() { Text = "", AutoSize = true };
+    private readonly Label _effectiveFormatLabel = new() { Text = "", AutoSize = true };
+    private readonly Label _formatWarningLabel = new() { Text = "", AutoSize = true };
+    private readonly Button _probeFormatsButton = new() { Text = "Probe exclusive formats" };
+    private readonly Button _toggleBlacklistButton = new() { Text = "Toggle blacklist" };
+    private readonly ListBox _formatList = new() { IntegralHeight = false, Height = 130 };
 
     private readonly TrackBar[] _channelSliders = new TrackBar[8];
     private readonly Label[] _channelLabels = new Label[8];
@@ -121,7 +130,20 @@ public sealed class RouterMainForm : Form
         RefreshDeviceLists();
         LoadConfigIntoControls();
 
+        WireFormatUi();
+        UpdateFormatInfo();
+
         RefreshProfilesCombo();
+    }
+
+    private void WireFormatUi()
+    {
+        _outputDeviceCombo.SelectedIndexChanged += (_, _) => UpdateFormatInfo();
+        _useExclusiveMode.CheckedChanged += (_, _) => UpdateFormatInfo();
+        _sampleRateCombo.SelectedIndexChanged += (_, _) => UpdateFormatInfo();
+
+        _probeFormatsButton.Click += (_, _) => ProbeExclusiveFormats();
+        _toggleBlacklistButton.Click += (_, _) => ToggleBlacklistForSelectedRate();
     }
 
     private TabPage BuildDevicesTab()
@@ -440,7 +462,7 @@ public sealed class RouterMainForm : Form
         {
             Dock = DockStyle.Fill,
             ColumnCount = 2,
-            RowCount = 11,
+            RowCount = 14,
             Padding = new Padding(12),
             AutoSize = true
         };
@@ -462,12 +484,173 @@ public sealed class RouterMainForm : Form
         layout.Controls.Add(new Label { Text = "Latency (ms)", AutoSize = true }, 0, 4);
         layout.Controls.Add(_latencyMs, 1, 4);
 
-        layout.Controls.Add(_useCenter, 1, 5);
+        layout.Controls.Add(new Label { Text = "Preferred sample rate (Hz)", AutoSize = true }, 0, 5);
+        _sampleRateCombo.Width = 140;
+        _sampleRateCombo.Items.Clear();
+        foreach (var sr in OutputFormatNegotiator.CandidateSampleRates)
+            _sampleRateCombo.Items.Add(sr);
+        layout.Controls.Add(_sampleRateCombo, 1, 5);
 
-        layout.Controls.Add(_useExclusiveMode, 1, 6);
+        layout.Controls.Add(_useCenter, 1, 6);
+
+        layout.Controls.Add(_useExclusiveMode, 1, 7);
+
+        layout.Controls.Add(new Label { Text = "Output format helper", AutoSize = true }, 0, 8);
+
+        var helperGroup = new GroupBox { Text = "Probe / warnings", Dock = DockStyle.Fill };
+        var helperLayout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 5,
+            AutoSize = true
+        };
+        helperLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        helperLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        helperLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        helperLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        helperLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+
+        helperLayout.Controls.Add(_mixFormatLabel, 0, 0);
+        helperLayout.Controls.Add(_effectiveFormatLabel, 0, 1);
+        helperLayout.Controls.Add(_formatWarningLabel, 0, 2);
+
+        var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, AutoSize = true };
+        buttons.Controls.Add(_probeFormatsButton);
+        buttons.Controls.Add(_toggleBlacklistButton);
+        helperLayout.Controls.Add(buttons, 0, 3);
+
+        _formatList.Dock = DockStyle.Fill;
+        helperLayout.Controls.Add(_formatList, 0, 4);
+
+        helperGroup.Controls.Add(helperLayout);
+        layout.Controls.Add(helperGroup, 1, 8);
 
         page.Controls.Add(layout);
         return page;
+    }
+
+    private int GetSelectedSampleRate()
+    {
+        return _sampleRateCombo.SelectedItem switch
+        {
+            int sr => sr,
+            string s when int.TryParse(s, out var sr) => sr,
+            _ => _config.SampleRate
+        };
+    }
+
+    private void SelectSampleRate(int sampleRate)
+    {
+        foreach (var item in _sampleRateCombo.Items)
+        {
+            if (item is int sr && sr == sampleRate)
+            {
+                _sampleRateCombo.SelectedItem = item;
+                return;
+            }
+        }
+
+        _sampleRateCombo.Items.Add(sampleRate);
+        _sampleRateCombo.SelectedItem = sampleRate;
+    }
+
+    private sealed record FormatProbeItem(int SampleRate, bool Supported, bool Blacklisted)
+    {
+        public override string ToString()
+        {
+            var ok = Supported ? "OK" : "NO";
+            var bl = Blacklisted ? " [BLACKLIST]" : "";
+            return $"{SampleRate} Hz - {ok}{bl}";
+        }
+    }
+
+    private void ProbeExclusiveFormats()
+    {
+        try
+        {
+            var devName = _outputDeviceCombo.SelectedItem as string;
+            if (string.IsNullOrWhiteSpace(devName))
+                throw new InvalidOperationException("Select an output device first.");
+
+            SaveConfigFromControls(showSavedDialog: false);
+
+            using var outputDevice = DeviceHelper.GetRenderDeviceByFriendlyName(devName);
+            var blacklist = new HashSet<int>(_config.BlacklistedSampleRates ?? []);
+
+            var rates = OutputFormatNegotiator.CandidateSampleRates
+                .Append(GetSelectedSampleRate())
+                .Distinct()
+                .OrderBy(r => r)
+                .ToList();
+
+            _formatList.Items.Clear();
+            foreach (var sr in rates)
+            {
+                var supported = OutputFormatNegotiator.IsExclusiveSupported(outputDevice, sr);
+                _formatList.Items.Add(new FormatProbeItem(sr, supported, blacklist.Contains(sr)));
+            }
+
+            UpdateFormatInfo();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, ex.Message, "Probe failed", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    private void ToggleBlacklistForSelectedRate()
+    {
+        if (_formatList.SelectedItem is not FormatProbeItem item)
+        {
+            MessageBox.Show(this, "Select a probed sample rate first.", "Blacklist", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        var list = (_config.BlacklistedSampleRates ?? []).ToList();
+        if (list.Contains(item.SampleRate))
+            list.RemoveAll(x => x == item.SampleRate);
+        else
+            list.Add(item.SampleRate);
+
+        _config.BlacklistedSampleRates = list.Distinct().OrderBy(x => x).ToArray();
+        SaveConfigToDisk(showSavedDialog: false);
+        ProbeExclusiveFormats();
+    }
+
+    private void UpdateFormatInfo()
+    {
+        try
+        {
+            var devName = _outputDeviceCombo.SelectedItem as string;
+            if (string.IsNullOrWhiteSpace(devName))
+            {
+                _mixFormatLabel.Text = "";
+                _effectiveFormatLabel.Text = "";
+                _formatWarningLabel.Text = "";
+                return;
+            }
+
+            using var outputDevice = DeviceHelper.GetRenderDeviceByFriendlyName(devName);
+            var mix = outputDevice.AudioClient.MixFormat;
+            _mixFormatLabel.Text = $"Windows mix: {mix.SampleRate} Hz, {mix.Channels}ch ({mix.Encoding})";
+
+            _sampleRateCombo.Enabled = _useExclusiveMode.Checked;
+
+            var temp = _config.Clone();
+            temp.OutputRenderDevice = devName;
+            temp.UseExclusiveMode = _useExclusiveMode.Checked;
+            temp.SampleRate = GetSelectedSampleRate();
+
+            var negotiation = OutputFormatNegotiator.Negotiate(temp, outputDevice);
+            _effectiveFormatLabel.Text = $"Effective output: 7.1 float @ {negotiation.EffectiveConfig.SampleRate} Hz ({(temp.UseExclusiveMode ? "Exclusive" : "Shared")})";
+            _formatWarningLabel.Text = negotiation.Warning ?? "";
+        }
+        catch (Exception ex)
+        {
+            _effectiveFormatLabel.Text = "";
+            _formatWarningLabel.Text = ex.Message;
+        }
     }
 
     private TabPage BuildChannelsTab()
@@ -812,6 +995,7 @@ public sealed class RouterMainForm : Form
         _latencyMs.Value = _config.LatencyMs;
         _useCenter.Checked = _config.UseCenterChannel;
         _useExclusiveMode.Checked = _config.UseExclusiveMode;
+        SelectSampleRate(_config.SampleRate);
 
         var gains = _config.ChannelGainsDb ?? new float[8];
         var map = _config.OutputChannelMap ?? [0, 1, 2, 3, 4, 5, 6, 7];
@@ -849,6 +1033,7 @@ public sealed class RouterMainForm : Form
         ApplyCalibrationPresetToControls();
 
         UpdateVisualMapButtons();
+        UpdateFormatInfo();
     }
 
     private void SaveConfigFromControls(bool showSavedDialog = true)
@@ -867,6 +1052,7 @@ public sealed class RouterMainForm : Form
         _config.LatencyMs = (int)_latencyMs.Value;
         _config.UseCenterChannel = _useCenter.Checked;
         _config.UseExclusiveMode = _useExclusiveMode.Checked;
+        _config.SampleRate = GetSelectedSampleRate();
 
         _config.EnableVoicePrompts = _testVoicePrompts.Checked;
         _config.CalibrationAutoStep = _testAutoStep.Checked;
@@ -906,6 +1092,8 @@ public sealed class RouterMainForm : Form
 
         _config.Validate();
         SaveConfigToDisk(showSavedDialog);
+
+        UpdateFormatInfo();
     }
 
     private void SaveConfigToDisk(bool showSavedDialog)
@@ -1094,6 +1282,12 @@ public sealed class RouterMainForm : Form
             _config = RouterConfig.Load(_configPath);
             _router = new WasapiDualRouter(_config);
             _router.Start();
+
+            if (!string.IsNullOrWhiteSpace(_router.FormatWarning))
+            {
+                _formatWarningLabel.Text = _router.FormatWarning;
+                _effectiveFormatLabel.Text = $"Effective output: 7.1 float @ {_router.EffectiveSampleRate} Hz ({(_config.UseExclusiveMode ? "Exclusive" : "Shared")})";
+            }
 
             _startButton.Enabled = false;
             _stopButton.Enabled = true;

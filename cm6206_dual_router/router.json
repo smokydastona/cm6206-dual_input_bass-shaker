@@ -5,6 +5,7 @@
   "latencyInputCaptureDevice": null,
 
   "sampleRate": 48000,
+  "blacklistedSampleRates": [192000],
   "outputChannels": 8,
 
   "musicGainDb": 0.0,

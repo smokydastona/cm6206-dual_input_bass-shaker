@@ -10,6 +10,9 @@
 - Visual 7.1 drag-to-remap mapper (swap via drag/drop).
 - Profiles in the UI (Save As / Load / Delete) stored as separate files in `%AppData%\\Cm6206DualRouter\\profiles\\*.json`.
 - Optional per-app auto-switching by process EXE name (profiles can declare `processNames`).
+- Output format helper: shared-mode mix-rate warnings, exclusive-format probing, and optional blacklisting of unstable sample rates.
+- Preferred sample-rate selector in the UI (used for Exclusive mode).
+- Updated READMEs and sample `router.json` to document sample-rate negotiation, probing/blacklisting, and the Windows 7.1 setup requirement.
 
 ## 2026-02-24
 

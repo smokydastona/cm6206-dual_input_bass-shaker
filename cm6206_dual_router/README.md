@@ -1,15 +1,17 @@
-# CM6206 Dual Virtual Router (2 virtual outputs -> 1 CM6206 7.1)
+# CM6206 Dual Router (2 Windows outputs → one 7.1 device)
 
-This is the "simple dual virtual device program" you described:
-- You pick **two Windows playback devices** as inputs (your virtual endpoints):
-  - `Music` device (full range)
-  - `Shaker` device (bass-only)
-- The app captures both via **WASAPI loopback** and outputs to **one physical device**:
-  - `CM6206 Speakers (7.1)`
+Pick two Windows playback endpoints (usually two virtual devices), and route them into one physical 7.1 output (CM6206-class USB adapters included).
 
-It also supports bass-only processing + 7.1 shaker distribution:
+Inputs:
+- **Music** device (full range)
+- **Shaker** device (bass-only)
+
+Output:
+- One **7.1 render endpoint** (your USB adapter)
+
+Shaker distribution defaults:
 - FL/FR get L/R
-- RL/RR copy L/R
+- BL/BR copy L/R
 - SL/SR copy L/R
 - LFE = (L+R) mono
 
@@ -29,6 +31,21 @@ cd "cm6206_dual_router"
 dotnet restore
 dotnet build -c Release
 ```
+
+## Quick start (UI)
+```powershell
+cd "cm6206_dual_router"
+dotnet run -c Release -- --ui --config router.json
+```
+
+1) In **Devices**, pick:
+- Music input device
+- Shaker input device
+- Output device
+
+2) Click **Start**.
+
+Tip: If you want normal apps to go to the Music input automatically, set your Windows default output to the Music virtual device (not the CM6206).
 
 ## Run
 List device names on your system:
@@ -55,7 +72,11 @@ UI tabs:
 - **Devices**: pick music/shaker/output endpoints + Start/Stop
 -  - Includes simple **Profiles** (Save As / Load / Delete)
   - Includes **round-trip latency measurement** (requires a selected mic/line-in and a physical loopback cable)
-- **DSP**: gains, shaker HP/LP, latency, exclusive-mode toggle
+- **DSP**: gains, shaker HP/LP, latency, sample rate + exclusive-mode toggle
+  - Includes an **Output format helper**:
+    - Shows the **Windows mix format** (what Shared mode actually runs at)
+    - Warns when **Shared mode ignores your chosen sample rate**
+    - Can **probe Exclusive-mode rates** and let you **blacklist** ones that crackle/glitch
 - **Channels**: per-channel gain, **remap**, mute, **solo**, invert (plus a quick Side↔Rear swap)
   - Visual 7.1 map supports **drag-to-remap** by swapping channel assignments
 - **Calibration**: play test tone/noise per channel to verify wiring & mapping
@@ -71,12 +92,23 @@ Or run the built exe:
 - Creating new playback devices *from scratch* requires a signed driver. This app instead uses whatever virtual devices you already have (Voicemeeter/VB-CABLE/etc.) and routes them.
 - If you set Windows default output to the `Music` virtual device, normal apps will go there automatically.
 
+## Important Windows audio setup (CM6206 gotcha)
+This app outputs 7.1 audio. If Windows is set to **Stereo** for your USB adapter, starting the router in Shared mode can fail.
+
+In Windows Sound settings for the output device:
+- **Configure speakers**: set to **7.1**
+- **Advanced**: choose a reasonable default format (48 kHz is usually safest)
+
 ## Config knobs (router.json)
 - `musicGainDb`, `shakerGainDb`: independent level controls.
 - `shakerHighPassHz`, `shakerLowPassHz`: bass shaker band-pass.
 - `musicHighPassHz`, `musicLowPassHz`: optional music filtering (omit or set `null` for none).
 - `rearGainDb`, `sideGainDb`, `lfeGainDb`: per-group trims for shaker distribution.
 - `useCenterChannel`: optional mono feed to center.
+- `sampleRate`: preferred output sample rate.
+  - **Exclusive mode**: the app tries to open *exactly* this format.
+  - **Shared mode**: Windows uses the device **mix format** sample rate; the app will show you the effective rate in the UI.
+- `blacklistedSampleRates`: optional list of sample rates to avoid when probing/falling back in Exclusive mode (useful for adapters that “support” 192kHz but glitch).
 - `latencyMs`: output latency (lower = snappier, higher = safer).
 - `channelGainsDb`: per-channel trims in dB for FL,FR,FC,LFE,BL,BR,SL,SR.
 - `outputChannelMap`: per-channel routing map (indices 0..7) to fix Side/Rear swap etc.
@@ -93,3 +125,4 @@ Or run the built exe:
 - If you hear feedback/echo: don’t route the CM6206 output back into one of the input virtual devices.
 - If the app can’t find a device: copy the exact name from Windows Sound settings.
 - Latency measurement: connect the CM6206 output to your chosen capture device (line-in preferred), set input levels so the click is visible but not clipping.
+- If Start fails in Shared mode: confirm the output device is configured as **7.1** (not Stereo) in Windows.

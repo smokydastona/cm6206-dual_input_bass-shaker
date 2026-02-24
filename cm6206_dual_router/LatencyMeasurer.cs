@@ -20,6 +20,9 @@ public static class LatencyMeasurer
         using var outputDevice = DeviceHelper.GetRenderDeviceByFriendlyName(config.OutputRenderDevice);
         using var captureDevice = DeviceHelper.GetCaptureDeviceByFriendlyName(captureDeviceFriendlyName);
 
+        var negotiation = OutputFormatNegotiator.Negotiate(config, outputDevice);
+        var effective = negotiation.EffectiveConfig;
+
         using var capture = new WasapiCapture(captureDevice);
 
         var captured = new List<float>(capture.WaveFormat.SampleRate * 2);
@@ -73,9 +76,9 @@ public static class LatencyMeasurer
             // Fallback: ignore unsupported formats.
         };
 
-        using var output = CreateOutput(config, outputDevice);
+        using var output = CreateOutput(effective, outputDevice);
 
-        var format = WaveFormatFactory.Create7Point1Float(config.SampleRate);
+        var format = WaveFormatFactory.Create7Point1Float(effective.SampleRate);
         var click = new ClickSampleProvider(format)
         {
             ChannelIndex = 0,
