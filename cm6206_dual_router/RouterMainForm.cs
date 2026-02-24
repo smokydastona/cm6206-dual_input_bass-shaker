@@ -58,6 +58,8 @@ public sealed class RouterMainForm : Form
     private readonly NumericUpDown _hpHz = new() { Minimum = 1, Maximum = 300, DecimalPlaces = 1, Increment = 1 };
     private readonly NumericUpDown _lpHz = new() { Minimum = 5, Maximum = 300, DecimalPlaces = 1, Increment = 1 };
 
+    private readonly ComboBox _mixingModeCombo = new() { DropDownStyle = ComboBoxStyle.DropDownList };
+
     private readonly NumericUpDown _latencyMs = new() { Minimum = 10, Maximum = 500, DecimalPlaces = 0, Increment = 5 };
 
     private readonly ComboBox _sampleRateCombo = new() { DropDownStyle = ComboBoxStyle.DropDownList };
@@ -845,7 +847,7 @@ public sealed class RouterMainForm : Form
         {
             Dock = DockStyle.Fill,
             ColumnCount = 2,
-            RowCount = 14,
+            RowCount = 15,
             Padding = new Padding(12),
             AutoSize = true
         };
@@ -864,21 +866,28 @@ public sealed class RouterMainForm : Form
         layout.Controls.Add(new Label { Text = "Shaker low-pass (Hz)", AutoSize = true }, 0, 3);
         layout.Controls.Add(_lpHz, 1, 3);
 
-        layout.Controls.Add(new Label { Text = "Latency (ms)", AutoSize = true }, 0, 4);
-        layout.Controls.Add(_latencyMs, 1, 4);
+        layout.Controls.Add(new Label { Text = "Mixing mode", AutoSize = true }, 0, 4);
+        _mixingModeCombo.Width = 360;
+        _mixingModeCombo.Items.Clear();
+        _mixingModeCombo.Items.Add("Front = Music + Shaker (default)");
+        _mixingModeCombo.Items.Add("Dedicated (Front = Music only; Shaker = Rear/Side/LFE)");
+        layout.Controls.Add(_mixingModeCombo, 1, 4);
 
-        layout.Controls.Add(new Label { Text = "Preferred sample rate (Hz)", AutoSize = true }, 0, 5);
+        layout.Controls.Add(new Label { Text = "Latency (ms)", AutoSize = true }, 0, 5);
+        layout.Controls.Add(_latencyMs, 1, 5);
+
+        layout.Controls.Add(new Label { Text = "Preferred sample rate (Hz)", AutoSize = true }, 0, 6);
         _sampleRateCombo.Width = 140;
         _sampleRateCombo.Items.Clear();
         foreach (var sr in OutputFormatNegotiator.CandidateSampleRates)
             _sampleRateCombo.Items.Add(sr);
-        layout.Controls.Add(_sampleRateCombo, 1, 5);
+        layout.Controls.Add(_sampleRateCombo, 1, 6);
 
-        layout.Controls.Add(_useCenter, 1, 6);
+        layout.Controls.Add(_useCenter, 1, 7);
 
-        layout.Controls.Add(_useExclusiveMode, 1, 7);
+        layout.Controls.Add(_useExclusiveMode, 1, 8);
 
-        layout.Controls.Add(new Label { Text = "Output format helper", AutoSize = true }, 0, 8);
+        layout.Controls.Add(new Label { Text = "Output format helper", AutoSize = true }, 0, 9);
 
         var helperGroup = new GroupBox { Text = "Probe / warnings", Dock = DockStyle.Fill };
         var helperLayout = new TableLayoutPanel
@@ -907,7 +916,7 @@ public sealed class RouterMainForm : Form
         helperLayout.Controls.Add(_formatList, 0, 4);
 
         helperGroup.Controls.Add(helperLayout);
-        layout.Controls.Add(helperGroup, 1, 8);
+        layout.Controls.Add(helperGroup, 1, 9);
 
         page.Controls.Add(layout);
         return page;
@@ -1375,6 +1384,12 @@ public sealed class RouterMainForm : Form
         _hpHz.Value = (decimal)_config.ShakerHighPassHz;
         _lpHz.Value = (decimal)_config.ShakerLowPassHz;
 
+        _mixingModeCombo.SelectedIndex = ((_config.MixingMode ?? "FrontBoth").Trim()) switch
+        {
+            "Dedicated" => 1,
+            _ => 0
+        };
+
         _latencyMs.Value = _config.LatencyMs;
         _useCenter.Checked = _config.UseCenterChannel;
         _useExclusiveMode.Checked = _config.UseExclusiveMode;
@@ -1431,6 +1446,12 @@ public sealed class RouterMainForm : Form
 
         _config.ShakerHighPassHz = (float)_hpHz.Value;
         _config.ShakerLowPassHz = (float)_lpHz.Value;
+
+        _config.MixingMode = _mixingModeCombo.SelectedIndex switch
+        {
+            1 => "Dedicated",
+            _ => "FrontBoth"
+        };
 
         _config.LatencyMs = (int)_latencyMs.Value;
         _config.UseCenterChannel = _useCenter.Checked;

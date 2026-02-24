@@ -40,6 +40,12 @@ public sealed class RouterConfig
     [JsonPropertyName("shakerLowPassHz")]
     public float ShakerLowPassHz { get; set; } = 80.0f;
 
+    // Mixing strategy for how inputs are combined.
+    // - FrontBoth: Front L/R = Music + Shaker (current/default behavior)
+    // - Dedicated: Front L/R = Music only; Shaker stays on Rear/Side/LFE
+    [JsonPropertyName("mixingMode")]
+    public string MixingMode { get; set; } = "FrontBoth";
+
     [JsonPropertyName("musicHighPassHz")]
     public float? MusicHighPassHz { get; set; } = null;
 
@@ -159,6 +165,10 @@ public sealed class RouterConfig
             throw new InvalidOperationException("calibrationPreset must be one of: Manual, IdentifySine, LevelPink, AlternateSinePink");
         if (ShakerHighPassHz <= 0 || ShakerLowPassHz <= 0 || ShakerHighPassHz >= ShakerLowPassHz)
             throw new InvalidOperationException("shakerHighPassHz must be >0 and < shakerLowPassHz");
+
+        var mode = (MixingMode ?? "FrontBoth").Trim();
+        if (mode is not ("FrontBoth" or "Dedicated"))
+            throw new InvalidOperationException("mixingMode must be one of: FrontBoth, Dedicated");
 
         if (ChannelGainsDb is not null && ChannelGainsDb.Length != 8)
             throw new InvalidOperationException("channelGainsDb must be an array of 8 floats (FL,FR,FC,LFE,BL,BR,SL,SR)");

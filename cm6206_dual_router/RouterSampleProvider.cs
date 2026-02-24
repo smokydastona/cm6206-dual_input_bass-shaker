@@ -164,11 +164,12 @@ public sealed class RouterSampleProvider : ISampleProvider
                 sR = _shakerLpR.Transform(sR);
 
                 // Mix strategy:
-                // - Front channels carry BOTH streams (so you can still keep separate level control, but one physical output)
+                // - Front channels can carry BOTH streams or just Music (see mixingMode)
                 // - Rear/Side channels carry shaker (distributed)
                 // - LFE gets mono sum of shaker (+ optionally music if you set musicLowPassHz)
-                var frontL = mL + sL;
-                var frontR = mR + sR;
+                var mode = (_config.MixingMode ?? "FrontBoth").Trim();
+                var frontL = mode.Equals("Dedicated", StringComparison.OrdinalIgnoreCase) ? mL : (mL + sL);
+                var frontR = mode.Equals("Dedicated", StringComparison.OrdinalIgnoreCase) ? mR : (mR + sR);
 
                 var lfe = (sL + sR) * 0.5f * _lfeGain;
 
