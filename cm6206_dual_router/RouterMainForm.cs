@@ -45,8 +45,13 @@ public sealed class RouterMainForm : Form
     private readonly NumericUpDown _testFreq = new() { Minimum = 10, Maximum = 20000, DecimalPlaces = 0, Increment = 10 };
     private readonly NumericUpDown _testLevelDb = new() { Minimum = -60, Maximum = 0, DecimalPlaces = 1, Increment = 1 };
     private readonly CheckBox _testVoicePrompts = new() { Text = "Voice prompts", AutoSize = true };
+    private readonly CheckBox _testAutoStep = new() { Text = "Auto-step channels", AutoSize = true };
+    private readonly CheckBox _testLoop = new() { Text = "Loop", AutoSize = true };
+    private readonly NumericUpDown _testStepMs = new() { Minimum = 250, Maximum = 30000, DecimalPlaces = 0, Increment = 250 };
     private readonly Button _testStartButton = new() { Text = "Start test" };
     private readonly Button _testStopButton = new() { Text = "Stop test", Enabled = false };
+
+    private readonly System.Windows.Forms.Timer _autoStepTimer = new();
 
     private static readonly string[] ChannelNames =
     [
@@ -78,6 +83,8 @@ public sealed class RouterMainForm : Form
         tabs.TabPages.Add(BuildCalibrationTab());
 
         Controls.Add(tabs);
+
+        _autoStepTimer.Tick += (_, _) => AutoStepTick();
 
         FormClosing += (_, _) =>
         {
@@ -275,6 +282,8 @@ public sealed class RouterMainForm : Form
 
         _testFreq.Value = 440;
         _testLevelDb.Value = -18;
+        _testStepMs.Value = 2000;
+        _testLoop.Checked = true;
 
         layout.Controls.Add(new Label { Text = "Channel", AutoSize = true }, 0, 0);
         layout.Controls.Add(_testChannelCombo, 1, 0);
@@ -288,12 +297,21 @@ public sealed class RouterMainForm : Form
         layout.Controls.Add(new Label { Text = "Level (dB)", AutoSize = true }, 0, 3);
         layout.Controls.Add(_testLevelDb, 1, 3);
 
-        layout.Controls.Add(_testVoicePrompts, 1, 4);
+        var optionsRow = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, AutoSize = true };
+        optionsRow.Controls.Add(_testVoicePrompts);
+        optionsRow.Controls.Add(_testAutoStep);
+        optionsRow.Controls.Add(_testLoop);
+        layout.Controls.Add(optionsRow, 1, 4);
+
+        var stepRow = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, AutoSize = true };
+        stepRow.Controls.Add(new Label { Text = "Step (ms)", AutoSize = true, Padding = new Padding(0, 6, 0, 0) });
+        stepRow.Controls.Add(_testStepMs);
+        layout.Controls.Add(stepRow, 1, 5);
 
         var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, AutoSize = true };
         buttons.Controls.Add(_testStartButton);
         buttons.Controls.Add(_testStopButton);
-        layout.Controls.Add(buttons, 1, 5);
+        layout.Controls.Add(buttons, 1, 6);
 
         _testStartButton.Click += (_, _) => StartTest();
         _testStopButton.Click += (_, _) => StopTest();
@@ -365,6 +383,9 @@ public sealed class RouterMainForm : Form
         }
 
         _testVoicePrompts.Checked = _config.EnableVoicePrompts;
+        _testAutoStep.Checked = _config.CalibrationAutoStep;
+        _testStepMs.Value = _config.CalibrationStepMs;
+        _testLoop.Checked = _config.CalibrationLoop;
     }
 
     private void SaveConfigFromControls()
@@ -383,6 +404,9 @@ public sealed class RouterMainForm : Form
         _config.UseCenterChannel = _useCenter.Checked;
 
         _config.EnableVoicePrompts = _testVoicePrompts.Checked;
+        _config.CalibrationAutoStep = _testAutoStep.Checked;
+        _config.CalibrationStepMs = (int)_testStepMs.Value;
+        _config.CalibrationLoop = _testLoop.Checked;
 
         var channel = new float[8];
         for (var i = 0; i < 8; i++)
@@ -435,6 +459,12 @@ public sealed class RouterMainForm : Form
             if (_testVoicePrompts.Checked)
                 VoicePrompter.Speak(ChannelNames[_testChannelCombo.SelectedIndex]);
 
+            if (_testAutoStep.Checked)
+            {
+                _autoStepTimer.Interval = (int)_testStepMs.Value;
+                _autoStepTimer.Start();
+            }
+
             _testStartButton.Enabled = false;
             _testStopButton.Enabled = true;
         }
@@ -452,6 +482,7 @@ public sealed class RouterMainForm : Form
 
         try
         {
+            _autoStepTimer.Stop();
             _tonePlayer.Stop();
             _tonePlayer.Dispose();
         }
@@ -461,6 +492,32 @@ public sealed class RouterMainForm : Form
             _testStartButton.Enabled = true;
             _testStopButton.Enabled = false;
         }
+    }
+
+    private void AutoStepTick()
+    {
+        if (_tonePlayer is null)
+        {
+            _autoStepTimer.Stop();
+            return;
+        }
+
+        var next = _testChannelCombo.SelectedIndex + 1;
+        if (next >= 8)
+        {
+            if (_testLoop.Checked)
+            {
+                next = 0;
+            }
+            else
+            {
+                _autoStepTimer.Stop();
+                return;
+            }
+        }
+
+        // This triggers SelectedIndexChanged handler which updates tone channel + speaks (if enabled).
+        _testChannelCombo.SelectedIndex = next;
     }
 
     private void StartRouter()

@@ -22,6 +22,9 @@
   "useCenterChannel": false,
   "useExclusiveMode": false,
   "enableVoicePrompts": true,
+  "calibrationAutoStep": false,
+  "calibrationStepMs": 2000,
+  "calibrationLoop": true,
   "latencyMs": 50,
 
   "channelGainsDb": [

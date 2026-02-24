@@ -56,6 +56,15 @@ public sealed class RouterConfig
     [JsonPropertyName("enableVoicePrompts")]
     public bool EnableVoicePrompts { get; set; } = true;
 
+    [JsonPropertyName("calibrationAutoStep")]
+    public bool CalibrationAutoStep { get; set; } = false;
+
+    [JsonPropertyName("calibrationStepMs")]
+    public int CalibrationStepMs { get; set; } = 2000;
+
+    [JsonPropertyName("calibrationLoop")]
+    public bool CalibrationLoop { get; set; } = true;
+
     // Per-output-channel trims (dB). Order is WAVEFORMATEXTENSIBLE 7.1:
     // FL, FR, FC, LFE, BL, BR, SL, SR
     // If null, defaults to 0 dB on all channels.
@@ -113,6 +122,9 @@ public sealed class RouterConfig
             throw new InvalidOperationException("This build currently expects outputChannels=8 (7.1)");
         if (LatencyMs < 10 || LatencyMs > 500)
             throw new InvalidOperationException("latencyMs is out of range (10..500)");
+
+        if (CalibrationStepMs < 250 || CalibrationStepMs > 30000)
+            throw new InvalidOperationException("calibrationStepMs is out of range (250..30000)");
         if (ShakerHighPassHz <= 0 || ShakerLowPassHz <= 0 || ShakerHighPassHz >= ShakerLowPassHz)
             throw new InvalidOperationException("shakerHighPassHz must be >0 and < shakerLowPassHz");
 

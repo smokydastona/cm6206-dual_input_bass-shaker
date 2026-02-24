@@ -57,6 +57,7 @@ UI tabs:
 - **Channels**: per-channel gain, **remap**, mute, invert (plus a quick Side↔Rear swap)
 - **Calibration**: play test tone/noise per channel to verify wiring & mapping
   - Optional **Voice prompts** checkbox to speak the channel name
+  - Optional **Auto-step channels** mode to cycle FL→…→SR automatically
 
 Or run the built exe:
 - `bin\\Release\\net8.0-windows\\Cm6206DualRouter.exe --config router.json`
