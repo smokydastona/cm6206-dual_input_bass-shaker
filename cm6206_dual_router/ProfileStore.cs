@@ -10,6 +10,45 @@ public static class ProfileStore
         PropertyNameCaseInsensitive = true
     };
 
+    private static void EnsureBundledDefaultProfilesInstalled()
+    {
+        // Profiles are stored under %AppData%\Cm6206DualRouter\profiles.
+        // For first-run UX, we ship some defaults with the app and copy them in once.
+        try
+        {
+            var baseDir = AppContext.BaseDirectory;
+            var bundledDir = Path.Combine(baseDir, "default_profiles");
+            if (!Directory.Exists(bundledDir))
+                return;
+
+            var bundledFiles = Directory.EnumerateFiles(bundledDir, "*.json", SearchOption.TopDirectoryOnly);
+            foreach (var file in bundledFiles)
+            {
+                try
+                {
+                    var json = File.ReadAllText(file);
+                    var profile = JsonSerializer.Deserialize<RouterProfile>(json, JsonOptions);
+                    if (profile is null || string.IsNullOrWhiteSpace(profile.Name))
+                        continue;
+
+                    var targetPath = GetProfilePathForName(profile.Name);
+                    if (File.Exists(targetPath))
+                        continue;
+
+                    SaveProfile(profile);
+                }
+                catch
+                {
+                    // ignore invalid bundled profiles
+                }
+            }
+        }
+        catch
+        {
+            // ignore; profiles are an optional UX feature
+        }
+    }
+
     public static string GetProfilesDirectory()
     {
         var dir = Path.Combine(
@@ -75,6 +114,7 @@ public static class ProfileStore
 
     public static List<RouterProfile> LoadAll()
     {
+        EnsureBundledDefaultProfilesInstalled();
         TryMigrateLegacyProfilesFile();
 
         var dir = GetProfilesDirectory();

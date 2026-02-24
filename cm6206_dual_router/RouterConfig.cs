@@ -124,14 +124,17 @@ public sealed class RouterConfig
         return config;
     }
 
-    public void Validate()
+    public void Validate(bool requireDevices = true)
     {
-        if (string.IsNullOrWhiteSpace(MusicInputRenderDevice))
-            throw new InvalidOperationException("musicInputRenderDevice is required");
-        if (string.IsNullOrWhiteSpace(ShakerInputRenderDevice))
-            throw new InvalidOperationException("shakerInputRenderDevice is required");
-        if (string.IsNullOrWhiteSpace(OutputRenderDevice))
-            throw new InvalidOperationException("outputRenderDevice is required");
+        if (requireDevices)
+        {
+            if (string.IsNullOrWhiteSpace(MusicInputRenderDevice))
+                throw new InvalidOperationException("musicInputRenderDevice is required");
+            if (string.IsNullOrWhiteSpace(ShakerInputRenderDevice))
+                throw new InvalidOperationException("shakerInputRenderDevice is required");
+            if (string.IsNullOrWhiteSpace(OutputRenderDevice))
+                throw new InvalidOperationException("outputRenderDevice is required");
+        }
         if (SampleRate < 8000 || SampleRate > 384000)
             throw new InvalidOperationException("sampleRate is out of range");
 

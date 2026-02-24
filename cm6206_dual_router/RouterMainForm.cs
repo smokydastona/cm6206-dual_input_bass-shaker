@@ -308,15 +308,22 @@ public sealed class RouterMainForm : Form
 
         _lastAutoProfileApplied = match.Name;
 
-        // Apply profile and hot-switch router if running.
-        var wasRunning = _router is not null;
-        StopTest();
-        StopRouter();
+        try
+        {
+            // Apply profile and hot-switch router if running.
+            var wasRunning = _router is not null;
+            StopTest();
+            StopRouter();
 
-        ApplyProfileConfigToUi(match);
+            ApplyProfileConfigToUi(match);
 
-        if (wasRunning)
-            StartRouter();
+            if (wasRunning)
+                StartRouter();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, ex.Message, "Auto-switch failed", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
     }
 
     private async Task MeasureLatencyAsync()
@@ -398,7 +405,8 @@ public sealed class RouterMainForm : Form
         _config.OutputRenderDevice = keepOutput;
         _config.LatencyInputCaptureDevice = keepLatencyCapture;
 
-        _config.Validate();
+        // Profiles should be applicable even before device names are set up.
+        _config.Validate(requireDevices: false);
         LoadConfigIntoControls();
         SaveConfigToDisk(showSavedDialog: false);
     }
