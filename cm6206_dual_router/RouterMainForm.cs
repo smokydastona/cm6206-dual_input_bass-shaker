@@ -26,6 +26,7 @@ public sealed class RouterMainForm : Form
     private readonly NumericUpDown _latencyMs = new() { Minimum = 10, Maximum = 500, DecimalPlaces = 0, Increment = 5 };
 
     private readonly CheckBox _useCenter = new() { Text = "Use Center channel" };
+    private readonly CheckBox _useExclusiveMode = new() { Text = "Use WASAPI Exclusive mode (if supported)" };
 
     private readonly TrackBar[] _channelSliders = new TrackBar[8];
     private readonly Label[] _channelLabels = new Label[8];
@@ -228,7 +229,7 @@ public sealed class RouterMainForm : Form
         {
             Dock = DockStyle.Fill,
             ColumnCount = 2,
-            RowCount = 10,
+            RowCount = 11,
             Padding = new Padding(12),
             AutoSize = true
         };
@@ -251,6 +252,8 @@ public sealed class RouterMainForm : Form
         layout.Controls.Add(_latencyMs, 1, 4);
 
         layout.Controls.Add(_useCenter, 1, 5);
+
+        layout.Controls.Add(_useExclusiveMode, 1, 6);
 
         page.Controls.Add(layout);
         return page;
@@ -463,6 +466,7 @@ public sealed class RouterMainForm : Form
 
         _latencyMs.Value = _config.LatencyMs;
         _useCenter.Checked = _config.UseCenterChannel;
+        _useExclusiveMode.Checked = _config.UseExclusiveMode;
 
         var gains = _config.ChannelGainsDb ?? new float[8];
         var map = _config.OutputChannelMap ?? [0, 1, 2, 3, 4, 5, 6, 7];
@@ -514,6 +518,7 @@ public sealed class RouterMainForm : Form
 
         _config.LatencyMs = (int)_latencyMs.Value;
         _config.UseCenterChannel = _useCenter.Checked;
+        _config.UseExclusiveMode = _useExclusiveMode.Checked;
 
         _config.EnableVoicePrompts = _testVoicePrompts.Checked;
         _config.CalibrationAutoStep = _testAutoStep.Checked;
