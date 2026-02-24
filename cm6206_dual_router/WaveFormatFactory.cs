@@ -1,3 +1,4 @@
+using System.Reflection;
 using NAudio.Wave;
 
 namespace Cm6206DualRouter;
@@ -17,12 +18,22 @@ public static class WaveFormatFactory
 
     public static WaveFormat Create7Point1Float(int sampleRate)
     {
-        var ext = new WaveFormatExtensible(sampleRate, 32, 8)
-        {
-            ChannelMask = (WaveFormatExtensible.ChannelMask)Speaker7Point1Mask,
-            SubFormat = AudioSubtypes.IeeeFloat
-        };
-
+        // NAudio 2.2.x: WaveFormatExtensible doesn't expose public setters for channel mask / subformat.
+        // The ctor sets SubFormat to IEEE float when bits==32.
+        var ext = new WaveFormatExtensible(sampleRate, 32, 8);
+        TrySetChannelMask(ext, Speaker7Point1Mask);
         return ext;
+    }
+
+    private static void TrySetChannelMask(WaveFormatExtensible ext, int mask)
+    {
+        // Best-effort: ensure Windows sees the correct speaker positions for 7.1 (side channels)
+        // without taking a hard dependency on NAudio internals.
+        const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+        var field = typeof(WaveFormatExtensible).GetField("dwChannelMask", flags);
+        if (field is null || field.FieldType != typeof(int))
+            return;
+
+        field.SetValue(ext, mask);
     }
 }

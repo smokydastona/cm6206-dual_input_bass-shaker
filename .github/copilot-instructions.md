@@ -44,3 +44,10 @@ This repo is primarily **two .NET 8 Windows audio apps** that use **NAudio + WAS
 - Device selection is by **exact friendly name**; keep UX changes consistent with the existing “list devices → copy/paste name into JSON” flow.
 - Avoid introducing audio clicks/glitches: keep per-sample math simple; prefer stable smoothing at effect/mixer level over aggressive limiting.
 
+## Version control (keep CI in sync)
+- After each **completed logical change set** (e.g., “fix build error”, “add feature”, “refactor X”), run `git status`, then:
+  - `git add -A`
+  - `git commit -m "<short message>"`
+  - `git push`
+- If `git push` can’t run (no remote / no auth), clearly say so and stop after committing.
+

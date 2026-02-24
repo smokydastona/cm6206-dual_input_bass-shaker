@@ -121,6 +121,9 @@ public sealed class RouterSampleProvider : ISampleProvider
 
         try
         {
+            // CA2014: avoid stackalloc inside the per-frame loop.
+            Span<float> raw = stackalloc float[8];
+
             var musicRead = _musicStereo.Read(musicTmp, 0, framesRequested * 2);
             var shakerRead = _shakerStereo.Read(shakerTmp, 0, framesRequested * 2);
 
@@ -185,7 +188,6 @@ public sealed class RouterSampleProvider : ISampleProvider
                 var outBase = offset + (frame * outChannels);
 
                 // Source order (raw): FL, FR, FC, LFE, BL, BR, SL, SR
-                Span<float> raw = stackalloc float[8];
                 raw[0] = frontL;
                 raw[1] = frontR;
                 raw[2] = center;
