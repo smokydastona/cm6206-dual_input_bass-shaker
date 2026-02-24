@@ -54,9 +54,12 @@ dotnet run -c Release -- --ui --config router.json
 UI tabs:
 - **Devices**: pick music/shaker/output endpoints + Start/Stop
 -  - Includes simple **Profiles** (Save As / Load / Delete)
+  - Includes **round-trip latency measurement** (requires a selected mic/line-in and a physical loopback cable)
 - **DSP**: gains, shaker HP/LP, latency, exclusive-mode toggle
 - **Channels**: per-channel gain, **remap**, mute, **solo**, invert (plus a quick Side↔Rear swap)
+  - Visual 7.1 map supports **drag-to-remap** by swapping channel assignments
 - **Calibration**: play test tone/noise per channel to verify wiring & mapping
+  - Supports **sine**, **pink/white noise**, and a **log sweep** generator
   - Optional **Voice prompts** checkbox to speak the channel name
   - Optional **Auto-step channels** mode to cycle FL→…→SR automatically
   - **Preset** dropdown can lock signal to Sine/Pink or alternate Sine↔Pink per step
@@ -87,3 +90,4 @@ Or run the built exe:
 ## Troubleshooting
 - If you hear feedback/echo: don’t route the CM6206 output back into one of the input virtual devices.
 - If the app can’t find a device: copy the exact name from Windows Sound settings.
+- Latency measurement: connect the CM6206 output to your chosen capture device (line-in preferred), set input levels so the click is visible but not clipping.

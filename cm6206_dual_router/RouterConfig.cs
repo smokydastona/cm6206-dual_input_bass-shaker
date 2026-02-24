@@ -14,6 +14,10 @@ public sealed class RouterConfig
     [JsonPropertyName("outputRenderDevice")]
     public string OutputRenderDevice { get; set; } = string.Empty;
 
+    // Optional: a microphone/line-in capture device used for round-trip latency measurement.
+    [JsonPropertyName("latencyInputCaptureDevice")]
+    public string? LatencyInputCaptureDevice { get; set; } = null;
+
     [JsonPropertyName("sampleRate")]
     public int SampleRate { get; set; } = 48000;
 

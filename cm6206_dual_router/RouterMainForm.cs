@@ -17,6 +17,10 @@ public sealed class RouterMainForm : Form
     private readonly ComboBox _shakerDeviceCombo = new() { DropDownStyle = ComboBoxStyle.DropDownList };
     private readonly ComboBox _outputDeviceCombo = new() { DropDownStyle = ComboBoxStyle.DropDownList };
 
+    private readonly ComboBox _latencyInputCombo = new() { DropDownStyle = ComboBoxStyle.DropDownList };
+    private readonly Button _measureLatencyButton = new() { Text = "Measure latency" };
+    private readonly Label _latencyResultLabel = new() { Text = "", AutoSize = true };
+
     private readonly NumericUpDown _musicGainDb = new() { Minimum = -60, Maximum = 20, DecimalPlaces = 1, Increment = 0.5M };
     private readonly NumericUpDown _shakerGainDb = new() { Minimum = -60, Maximum = 20, DecimalPlaces = 1, Increment = 0.5M };
 
@@ -34,6 +38,7 @@ public sealed class RouterMainForm : Form
     private readonly CheckBox[] _channelInvert = new CheckBox[8];
     private readonly CheckBox[] _channelSolo = new CheckBox[8];
     private readonly ComboBox[] _channelMap = new ComboBox[8];
+    private readonly Button[] _visualMapButtons = new Button[8];
 
     private readonly Button _identityMapButton = new() { Text = "Identity map" };
     private readonly Button _swapSideRearButton = new() { Text = "Swap Side/Rear" };
@@ -50,6 +55,8 @@ public sealed class RouterMainForm : Form
     private readonly ComboBox _testChannelCombo = new() { DropDownStyle = ComboBoxStyle.DropDownList };
     private readonly ComboBox _testTypeCombo = new() { DropDownStyle = ComboBoxStyle.DropDownList };
     private readonly NumericUpDown _testFreq = new() { Minimum = 10, Maximum = 20000, DecimalPlaces = 0, Increment = 10 };
+    private readonly NumericUpDown _testFreqEnd = new() { Minimum = 10, Maximum = 20000, DecimalPlaces = 0, Increment = 10 };
+    private readonly NumericUpDown _testSweepSec = new() { Minimum = 1, Maximum = 60, DecimalPlaces = 1, Increment = 0.5M };
     private readonly NumericUpDown _testLevelDb = new() { Minimum = -60, Maximum = 0, DecimalPlaces = 1, Increment = 1 };
     private readonly ComboBox _testPresetCombo = new() { DropDownStyle = ComboBoxStyle.DropDownList };
     private readonly CheckBox _testVoicePrompts = new() { Text = "Voice prompts", AutoSize = true };
@@ -116,7 +123,7 @@ public sealed class RouterMainForm : Form
         {
             Dock = DockStyle.Fill,
             ColumnCount = 2,
-            RowCount = 7,
+            RowCount = 9,
             Padding = new Padding(12),
             AutoSize = true
         };
@@ -132,14 +139,22 @@ public sealed class RouterMainForm : Form
         layout.Controls.Add(new Label { Text = "Output device (CM6206)", AutoSize = true }, 0, 2);
         layout.Controls.Add(_outputDeviceCombo, 1, 2);
 
-        layout.Controls.Add(new Label { Text = "Profile", AutoSize = true }, 0, 3);
+        layout.Controls.Add(new Label { Text = "Latency input (mic/line-in)", AutoSize = true }, 0, 3);
+        var latencyRow = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, AutoSize = true };
+        _latencyInputCombo.Width = 360;
+        latencyRow.Controls.Add(_latencyInputCombo);
+        latencyRow.Controls.Add(_measureLatencyButton);
+        latencyRow.Controls.Add(_latencyResultLabel);
+        layout.Controls.Add(latencyRow, 1, 3);
+
+        layout.Controls.Add(new Label { Text = "Profile", AutoSize = true }, 0, 4);
         var profileRow = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, AutoSize = true };
         _profileCombo.Width = 240;
         profileRow.Controls.Add(_profileCombo);
         profileRow.Controls.Add(_profileLoadButton);
         profileRow.Controls.Add(_profileSaveAsButton);
         profileRow.Controls.Add(_profileDeleteButton);
-        layout.Controls.Add(profileRow, 1, 3);
+        layout.Controls.Add(profileRow, 1, 4);
 
         var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, AutoSize = true };
         buttons.Controls.Add(_refreshButton);
@@ -147,7 +162,7 @@ public sealed class RouterMainForm : Form
         buttons.Controls.Add(_startButton);
         buttons.Controls.Add(_stopButton);
 
-        layout.Controls.Add(buttons, 1, 4);
+        layout.Controls.Add(buttons, 1, 5);
 
         _refreshButton.Click += (_, _) => RefreshDeviceLists();
         _saveButton.Click += (_, _) => SaveConfigFromControls();
@@ -158,8 +173,46 @@ public sealed class RouterMainForm : Form
         _profileSaveAsButton.Click += (_, _) => SaveCurrentAsNewProfile();
         _profileDeleteButton.Click += (_, _) => DeleteSelectedProfile();
 
+        _measureLatencyButton.Click += async (_, _) => await MeasureLatencyAsync();
+
         page.Controls.Add(layout);
         return page;
+    }
+
+    private async Task MeasureLatencyAsync()
+    {
+        try
+        {
+            StopTest();
+            StopRouter();
+
+            SaveConfigFromControls(showSavedDialog: false);
+            _config = RouterConfig.Load(_configPath);
+
+            var captureName = _latencyInputCombo.SelectedItem as string;
+            if (string.IsNullOrWhiteSpace(captureName))
+            {
+                MessageBox.Show(this, "Pick a capture device (mic/line-in) first.", "Latency", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            _measureLatencyButton.Enabled = false;
+            _latencyResultLabel.Text = "measuring...";
+
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            var result = await LatencyMeasurer.MeasureAsync(_config, captureName, cts.Token);
+
+            _latencyResultLabel.Text = $"~{result.EstimatedMs:0} ms";
+        }
+        catch (Exception ex)
+        {
+            _latencyResultLabel.Text = "";
+            MessageBox.Show(this, ex.Message, "Latency measurement failed", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+        finally
+        {
+            _measureLatencyButton.Enabled = true;
+        }
     }
 
     private void RefreshProfilesCombo()
@@ -267,7 +320,7 @@ public sealed class RouterMainForm : Form
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
-            RowCount = 2,
+            RowCount = 3,
             Padding = new Padding(12)
         };
 
@@ -278,6 +331,9 @@ public sealed class RouterMainForm : Form
 
         _identityMapButton.Click += (_, _) => SetIdentityMap();
         _swapSideRearButton.Click += (_, _) => SwapSideRear();
+
+        var visual = BuildVisualMapGroup();
+        root.Controls.Add(visual, 0, 1);
 
         var panel = new TableLayoutPanel
         {
@@ -322,6 +378,9 @@ public sealed class RouterMainForm : Form
             _channelMap[i] = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 150 };
             foreach (var n in ChannelNames) _channelMap[i].Items.Add(n);
 
+            var mapIdx = i;
+            _channelMap[i].SelectedIndexChanged += (_, _) => UpdateVisualMapButtons();
+
             var idx = i;
             _channelSliders[i].Scroll += (_, _) =>
             {
@@ -343,9 +402,109 @@ public sealed class RouterMainForm : Form
             panel.Controls.Add(_channelInvert[i], 5, i + 1);
         }
 
-        root.Controls.Add(panel, 0, 1);
+        root.Controls.Add(panel, 0, 2);
         page.Controls.Add(root);
         return page;
+    }
+
+    private Control BuildVisualMapGroup()
+    {
+        var group = new GroupBox
+        {
+            Text = "Visual 7.1 map (drag tiles to swap source channels)",
+            Dock = DockStyle.Top,
+            AutoSize = true
+        };
+
+        var grid = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 4,
+            RowCount = 3,
+            AutoSize = true
+        };
+        for (var i = 0; i < 4; i++)
+            grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 190));
+        for (var i = 0; i < 3; i++)
+            grid.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
+
+        // Positions by output-channel index: 0 FL,1 FR,2 FC,3 LFE,4 BL,5 BR,6 SL,7 SR
+        AddVisualButton(grid, 0, 0, 0);
+        AddVisualButton(grid, 2, 0, 1);
+        AddVisualButton(grid, 1, 1, 2);
+        AddVisualButton(grid, 3, 1, 3);
+        AddVisualButton(grid, 0, 1, 6);
+        AddVisualButton(grid, 2, 1, 7);
+        AddVisualButton(grid, 0, 2, 4);
+        AddVisualButton(grid, 2, 2, 5);
+
+        group.Controls.Add(grid);
+        return group;
+    }
+
+    private void AddVisualButton(TableLayoutPanel grid, int col, int row, int outputIndex)
+    {
+        var b = new Button
+        {
+            Dock = DockStyle.Fill,
+            AllowDrop = true,
+            Tag = outputIndex
+        };
+
+        b.MouseDown += (_, e) =>
+        {
+            if (e.Button != MouseButtons.Left) return;
+            b.DoDragDrop(outputIndex, DragDropEffects.Move);
+        };
+
+        b.DragEnter += (_, e) =>
+        {
+            if (e.Data?.GetDataPresent(typeof(int)) == true)
+                e.Effect = DragDropEffects.Move;
+        };
+
+        b.DragDrop += (_, e) =>
+        {
+            if (e.Data?.GetDataPresent(typeof(int)) != true) return;
+            var from = (int)e.Data.GetData(typeof(int))!;
+            var to = (int)b.Tag;
+            if (from == to) return;
+
+            var tmp = _channelMap[from].SelectedIndex;
+            _channelMap[from].SelectedIndex = _channelMap[to].SelectedIndex;
+            _channelMap[to].SelectedIndex = tmp;
+
+            UpdateVisualMapButtons();
+        };
+
+        _visualMapButtons[outputIndex] = b;
+        grid.Controls.Add(b, col, row);
+    }
+
+    private static string ShortName(int index) => index switch
+    {
+        0 => "FL",
+        1 => "FR",
+        2 => "FC",
+        3 => "LFE",
+        4 => "BL",
+        5 => "BR",
+        6 => "SL",
+        7 => "SR",
+        _ => index.ToString()
+    };
+
+    private void UpdateVisualMapButtons()
+    {
+        for (var outCh = 0; outCh < 8; outCh++)
+        {
+            var b = _visualMapButtons[outCh];
+            if (b is null) continue;
+
+            var src = _channelMap[outCh].SelectedIndex;
+            if (src < 0) src = outCh;
+            b.Text = $"{ShortName(outCh)} <- {ShortName(src)}";
+        }
     }
 
     private TabPage BuildCalibrationTab()
@@ -356,7 +515,7 @@ public sealed class RouterMainForm : Form
         {
             Dock = DockStyle.Fill,
             ColumnCount = 2,
-            RowCount = 8,
+            RowCount = 10,
             Padding = new Padding(12),
             AutoSize = true
         };
@@ -366,7 +525,7 @@ public sealed class RouterMainForm : Form
         foreach (var n in ChannelNames) _testChannelCombo.Items.Add(n);
         _testChannelCombo.SelectedIndex = 0;
 
-        _testTypeCombo.Items.AddRange(new object[] { ToneType.Sine, ToneType.PinkNoise, ToneType.WhiteNoise });
+        _testTypeCombo.Items.AddRange(new object[] { ToneType.Sine, ToneType.Sweep, ToneType.PinkNoise, ToneType.WhiteNoise });
         _testTypeCombo.SelectedItem = ToneType.Sine;
 
         _testPresetCombo.Items.AddRange(new object[]
@@ -379,6 +538,8 @@ public sealed class RouterMainForm : Form
         _testPresetCombo.SelectedIndex = 0;
 
         _testFreq.Value = 440;
+        _testFreqEnd.Value = 2000;
+        _testSweepSec.Value = 5;
         _testLevelDb.Value = -18;
         _testStepMs.Value = 2000;
         _testLoop.Checked = true;
@@ -395,27 +556,38 @@ public sealed class RouterMainForm : Form
         layout.Controls.Add(new Label { Text = "Frequency (Hz)", AutoSize = true }, 0, 3);
         layout.Controls.Add(_testFreq, 1, 3);
 
-        layout.Controls.Add(new Label { Text = "Level (dB)", AutoSize = true }, 0, 4);
-        layout.Controls.Add(_testLevelDb, 1, 4);
+        layout.Controls.Add(new Label { Text = "Sweep end (Hz)", AutoSize = true }, 0, 4);
+        layout.Controls.Add(_testFreqEnd, 1, 4);
+
+        layout.Controls.Add(new Label { Text = "Sweep time (sec)", AutoSize = true }, 0, 5);
+        layout.Controls.Add(_testSweepSec, 1, 5);
+
+        layout.Controls.Add(new Label { Text = "Level (dB)", AutoSize = true }, 0, 6);
+        layout.Controls.Add(_testLevelDb, 1, 6);
 
         var optionsRow = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, AutoSize = true };
         optionsRow.Controls.Add(_testVoicePrompts);
         optionsRow.Controls.Add(_testAutoStep);
         optionsRow.Controls.Add(_testLoop);
-        layout.Controls.Add(optionsRow, 1, 5);
+        layout.Controls.Add(optionsRow, 1, 7);
 
         var stepRow = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, AutoSize = true };
         stepRow.Controls.Add(new Label { Text = "Step (ms)", AutoSize = true, Padding = new Padding(0, 6, 0, 0) });
         stepRow.Controls.Add(_testStepMs);
-        layout.Controls.Add(stepRow, 1, 6);
+        layout.Controls.Add(stepRow, 1, 8);
 
         var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, AutoSize = true };
         buttons.Controls.Add(_testStartButton);
         buttons.Controls.Add(_testStopButton);
-        layout.Controls.Add(buttons, 1, 7);
+        layout.Controls.Add(buttons, 1, 9);
 
         _testStartButton.Click += (_, _) => StartTest();
         _testStopButton.Click += (_, _) => StopTest();
+
+        _testFreq.ValueChanged += (_, _) => { if (_tonePlayer is not null) _tonePlayer.SetFrequency((float)_testFreq.Value); };
+        _testFreqEnd.ValueChanged += (_, _) => { if (_tonePlayer is not null) _tonePlayer.SetSweepEndFrequency((float)_testFreqEnd.Value); };
+        _testSweepSec.ValueChanged += (_, _) => { if (_tonePlayer is not null) _tonePlayer.SetSweepSeconds((float)_testSweepSec.Value); };
+        _testLevelDb.ValueChanged += (_, _) => { if (_tonePlayer is not null) _tonePlayer.SetLevelDb((float)_testLevelDb.Value); };
 
         _testPresetCombo.SelectedIndexChanged += (_, _) => ApplyCalibrationPresetToControls();
 
@@ -438,6 +610,10 @@ public sealed class RouterMainForm : Form
             .Select(d => d.FriendlyName)
             .ToList();
 
+        var captureDevices = enumerator.EnumerateAudioEndPoints(DataFlow.Capture, DeviceState.Active)
+            .Select(d => d.FriendlyName)
+            .ToList();
+
         void SetItems(ComboBox combo)
         {
             var selected = combo.SelectedItem as string;
@@ -450,6 +626,15 @@ public sealed class RouterMainForm : Form
         SetItems(_musicDeviceCombo);
         SetItems(_shakerDeviceCombo);
         SetItems(_outputDeviceCombo);
+
+        // capture list
+        {
+            var selected = _latencyInputCombo.SelectedItem as string;
+            _latencyInputCombo.Items.Clear();
+            foreach (var name in captureDevices) _latencyInputCombo.Items.Add(name);
+            if (!string.IsNullOrWhiteSpace(selected) && _latencyInputCombo.Items.Contains(selected))
+                _latencyInputCombo.SelectedItem = selected;
+        }
     }
 
     private void LoadConfigIntoControls()
@@ -457,6 +642,8 @@ public sealed class RouterMainForm : Form
         SelectIfPresent(_musicDeviceCombo, _config.MusicInputRenderDevice);
         SelectIfPresent(_shakerDeviceCombo, _config.ShakerInputRenderDevice);
         SelectIfPresent(_outputDeviceCombo, _config.OutputRenderDevice);
+        if (!string.IsNullOrWhiteSpace(_config.LatencyInputCaptureDevice))
+            SelectIfPresent(_latencyInputCombo, _config.LatencyInputCaptureDevice);
 
         _musicGainDb.Value = (decimal)_config.MusicGainDb;
         _shakerGainDb.Value = (decimal)_config.ShakerGainDb;
@@ -502,6 +689,8 @@ public sealed class RouterMainForm : Form
         };
 
         ApplyCalibrationPresetToControls();
+
+        UpdateVisualMapButtons();
     }
 
     private void SaveConfigFromControls(bool showSavedDialog = true)
@@ -509,6 +698,7 @@ public sealed class RouterMainForm : Form
         _config.MusicInputRenderDevice = _musicDeviceCombo.SelectedItem as string ?? _config.MusicInputRenderDevice;
         _config.ShakerInputRenderDevice = _shakerDeviceCombo.SelectedItem as string ?? _config.ShakerInputRenderDevice;
         _config.OutputRenderDevice = _outputDeviceCombo.SelectedItem as string ?? _config.OutputRenderDevice;
+        _config.LatencyInputCaptureDevice = _latencyInputCombo.SelectedItem as string ?? _config.LatencyInputCaptureDevice;
 
         _config.MusicGainDb = (float)_musicGainDb.Value;
         _config.ShakerGainDb = (float)_shakerGainDb.Value;
@@ -579,13 +769,16 @@ public sealed class RouterMainForm : Form
             // Don’t run router and test simultaneously.
             StopRouter();
 
-            SaveConfigFromControls();
+            SaveConfigFromControls(showSavedDialog: false);
             _config = RouterConfig.Load(_configPath);
 
             _tonePlayer = new TonePlayer(_config);
             _tonePlayer.SetChannel(_testChannelCombo.SelectedIndex);
             _tonePlayer.SetType((ToneType)_testTypeCombo.SelectedItem!);
             _tonePlayer.SetFrequency((float)_testFreq.Value);
+            _tonePlayer.SetSweepEndFrequency((float)_testFreqEnd.Value);
+            _tonePlayer.SetSweepSeconds((float)_testSweepSec.Value);
+            _tonePlayer.SetSweepLoop(true);
             _tonePlayer.SetLevelDb((float)_testLevelDb.Value);
             _tonePlayer.Start();
 
@@ -681,24 +874,22 @@ public sealed class RouterMainForm : Form
             case 1:
                 _testTypeCombo.SelectedItem = ToneType.Sine;
                 _testTypeCombo.Enabled = false;
-                _testFreq.Enabled = true;
                 break;
             case 2:
                 _testTypeCombo.SelectedItem = ToneType.PinkNoise;
                 _testTypeCombo.Enabled = false;
-                _testFreq.Enabled = false;
                 break;
             case 3:
                 _alternateIsSine = true;
                 _testTypeCombo.SelectedItem = ToneType.Sine;
                 _testTypeCombo.Enabled = false;
-                _testFreq.Enabled = true;
                 break;
             default:
                 _testTypeCombo.Enabled = true;
-                _testFreq.Enabled = ((ToneType)_testTypeCombo.SelectedItem!) == ToneType.Sine;
                 break;
         }
+
+        UpdateCalibrationControlEnables();
 
         _testTypeCombo.SelectedIndexChanged -= TestTypeComboOnSelectedIndexChanged;
         _testTypeCombo.SelectedIndexChanged += TestTypeComboOnSelectedIndexChanged;
@@ -707,9 +898,31 @@ public sealed class RouterMainForm : Form
     private void TestTypeComboOnSelectedIndexChanged(object? sender, EventArgs e)
     {
         var t = (ToneType)_testTypeCombo.SelectedItem!;
-        _testFreq.Enabled = t == ToneType.Sine;
-        if (_tonePlayer is not null)
-            _tonePlayer.SetType(t);
+        UpdateCalibrationControlEnables();
+        if (_tonePlayer is null) return;
+
+        _tonePlayer.SetType(t);
+        if (t == ToneType.Sweep)
+        {
+            _tonePlayer.SetFrequency((float)_testFreq.Value);
+            _tonePlayer.SetSweepEndFrequency((float)_testFreqEnd.Value);
+            _tonePlayer.SetSweepSeconds((float)_testSweepSec.Value);
+        }
+        else if (t == ToneType.Sine)
+        {
+            _tonePlayer.SetFrequency((float)_testFreq.Value);
+        }
+    }
+
+    private void UpdateCalibrationControlEnables()
+    {
+        var t = (ToneType)_testTypeCombo.SelectedItem!;
+        var isSine = t == ToneType.Sine;
+        var isSweep = t == ToneType.Sweep;
+
+        _testFreq.Enabled = isSine || isSweep;
+        _testFreqEnd.Enabled = isSweep;
+        _testSweepSec.Enabled = isSweep;
     }
 
     private void StartRouter()
@@ -719,7 +932,7 @@ public sealed class RouterMainForm : Form
 
         try
         {
-            SaveConfigFromControls();
+            SaveConfigFromControls(showSavedDialog: false);
             _config = RouterConfig.Load(_configPath);
             _router = new WasapiDualRouter(_config);
             _router.Start();

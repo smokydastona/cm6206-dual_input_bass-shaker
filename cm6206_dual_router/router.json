@@ -2,6 +2,7 @@
   "musicInputRenderDevice": "Voicemeeter Input (VB-Audio Voicemeeter VAIO)",
   "shakerInputRenderDevice": "Voicemeeter AUX Input (VB-Audio Voicemeeter AUX VAIO)",
   "outputRenderDevice": "Speakers (USB Audio Class 1.0 and 2.0 Device Driver)",
+  "latencyInputCaptureDevice": null,
 
   "sampleRate": 48000,
   "outputChannels": 8,

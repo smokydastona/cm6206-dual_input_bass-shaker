@@ -30,6 +30,8 @@ internal static class Program
             if (listDevices)
             {
                 DeviceHelper.PrintRenderDevices();
+                Console.WriteLine();
+                DeviceHelper.PrintCaptureDevices();
                 return;
             }
 

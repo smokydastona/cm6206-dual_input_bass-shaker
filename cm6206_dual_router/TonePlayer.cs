@@ -33,6 +33,12 @@ public sealed class TonePlayer : IDisposable
 
     public void SetFrequency(float hz) => _tone.FrequencyHz = hz;
 
+    public void SetSweepEndFrequency(float hz) => _tone.SweepEndHz = hz;
+
+    public void SetSweepSeconds(float seconds) => _tone.SweepSeconds = seconds;
+
+    public void SetSweepLoop(bool loop) => _tone.SweepLoop = loop;
+
     public void SetLevelDb(float db) => _tone.LevelDb = db;
 
     public void Dispose()

@@ -5,6 +5,9 @@
 ### Added
 - Per-channel output remap + mute/solo/invert.
 - Calibration improvements: voice prompts, auto-step, and presets (including Sine/Pink alternation).
+- Calibration signal generator adds a sweep mode.
+- Round-trip latency measurement (requires selecting a capture device and physically looping output to input).
+- Visual 7.1 drag-to-remap mapper (swap via drag/drop).
 - Profiles in the UI (Save As / Load / Delete) stored in `%AppData%\\Cm6206DualRouter\\profiles.json`.
 
 ## 2026-02-24

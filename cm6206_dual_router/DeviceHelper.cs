@@ -19,6 +19,21 @@ public static class DeviceHelper
         Console.WriteLine("Tip: copy/paste the exact names into router.json");
     }
 
+    public static void PrintCaptureDevices()
+    {
+        using var enumerator = new MMDeviceEnumerator();
+        var devices = enumerator.EnumerateAudioEndPoints(DataFlow.Capture, DeviceState.Active);
+
+        Console.WriteLine("Active capture devices:");
+        foreach (var d in devices)
+        {
+            Console.WriteLine($"- {d.FriendlyName}");
+        }
+
+        Console.WriteLine();
+        Console.WriteLine("Tip: latency measurement needs a mic/line-in here.");
+    }
+
     public static MMDevice GetRenderDeviceByFriendlyName(string friendlyName)
     {
         using var enumerator = new MMDeviceEnumerator();
@@ -34,5 +49,22 @@ public static class DeviceHelper
             return match;
 
         throw new InvalidOperationException($"Render device not found: {friendlyName}. Use --list-devices.");
+    }
+
+    public static MMDevice GetCaptureDeviceByFriendlyName(string friendlyName)
+    {
+        using var enumerator = new MMDeviceEnumerator();
+        var devices = enumerator.EnumerateAudioEndPoints(DataFlow.Capture, DeviceState.Active);
+
+        var match = devices.FirstOrDefault(d => string.Equals(d.FriendlyName, friendlyName, StringComparison.OrdinalIgnoreCase));
+        if (match is not null)
+            return match;
+
+        // fallback: contains
+        match = devices.FirstOrDefault(d => d.FriendlyName.Contains(friendlyName, StringComparison.OrdinalIgnoreCase));
+        if (match is not null)
+            return match;
+
+        throw new InvalidOperationException($"Capture device not found: {friendlyName}. Use --list-devices.");
     }
 }

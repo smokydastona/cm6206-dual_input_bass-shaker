@@ -5,6 +5,7 @@ namespace Cm6206DualRouter;
 public enum ToneType
 {
     Sine,
+    Sweep,
     PinkNoise,
     WhiteNoise
 }
@@ -17,6 +18,7 @@ public sealed class ToneSampleProvider : ISampleProvider
 {
     private readonly int _sampleRate;
     private double _phase;
+    private long _sweepSamplePos;
 
     // Pink noise (Voss-McCartney) state
     private readonly Random _rng = new(12345);
@@ -31,6 +33,9 @@ public sealed class ToneSampleProvider : ISampleProvider
         ChannelIndex = 0;
         Type = ToneType.Sine;
         FrequencyHz = 440f;
+        SweepEndHz = 2000f;
+        SweepSeconds = 5.0f;
+        SweepLoop = true;
         LevelDb = -12f;
 
         for (var i = 0; i < _pinkRows.Length; i++)
@@ -44,6 +49,13 @@ public sealed class ToneSampleProvider : ISampleProvider
     public ToneType Type { get; set; }
 
     public float FrequencyHz { get; set; }
+
+    // Sweep uses FrequencyHz as start frequency.
+    public float SweepEndHz { get; set; }
+
+    public float SweepSeconds { get; set; }
+
+    public bool SweepLoop { get; set; }
 
     public float LevelDb { get; set; }
 
@@ -59,22 +71,67 @@ public sealed class ToneSampleProvider : ISampleProvider
 
         for (var frame = 0; frame < framesRequested; frame++)
         {
-            var sample = Type switch
+            float sample;
+
+            switch (Type)
             {
-                ToneType.Sine => (float)Math.Sin(_phase),
-                ToneType.WhiteNoise => NextWhite(),
-                ToneType.PinkNoise => NextPink(),
-                _ => 0f
-            };
+                case ToneType.Sine:
+                    sample = (float)Math.Sin(_phase);
+                    _phase += 2.0 * Math.PI * (FrequencyHz / _sampleRate);
+                    if (_phase > 2.0 * Math.PI) _phase -= 2.0 * Math.PI;
+                    break;
+
+                case ToneType.Sweep:
+                {
+                    sample = (float)Math.Sin(_phase);
+
+                    var startHz = Math.Clamp(FrequencyHz, 1f, 20000f);
+                    var endHz = Math.Clamp(SweepEndHz, 1f, 20000f);
+                    if (endHz < startHz)
+                        (startHz, endHz) = (endHz, startHz);
+
+                    var seconds = Math.Max(0.05f, SweepSeconds);
+                    var t = (double)_sweepSamplePos / _sampleRate;
+                    var progress = t / seconds;
+
+                    if (progress >= 1.0)
+                    {
+                        if (SweepLoop)
+                        {
+                            _sweepSamplePos = 0;
+                            progress = 0.0;
+                        }
+                        else
+                        {
+                            progress = 1.0;
+                        }
+                    }
+
+                    // Log sweep (sounds smoother across octaves).
+                    var ratio = endHz / startHz;
+                    var hz = startHz * Math.Pow(ratio, progress);
+
+                    _phase += 2.0 * Math.PI * (hz / _sampleRate);
+                    if (_phase > 2.0 * Math.PI) _phase -= 2.0 * Math.PI;
+
+                    _sweepSamplePos++;
+                    break;
+                }
+
+                case ToneType.WhiteNoise:
+                    sample = NextWhite();
+                    break;
+
+                case ToneType.PinkNoise:
+                    sample = NextPink();
+                    break;
+
+                default:
+                    sample = 0f;
+                    break;
+            }
 
             sample *= level;
-
-            // advance phase for sine
-            if (Type == ToneType.Sine)
-            {
-                _phase += 2.0 * Math.PI * (FrequencyHz / _sampleRate);
-                if (_phase > 2.0 * Math.PI) _phase -= 2.0 * Math.PI;
-            }
 
             var baseIndex = offset + (frame * channels);
             for (var ch = 0; ch < channels; ch++)

@@ -5,6 +5,7 @@ This repo provides a simple Windows app that:
 - Routes/mixes them into **one CM6206 7.1 output**.
 - Includes a **tabbed UI** with **per-channel trims** (FL/FR/FC/LFE/BL/BR/SL/SR).
 - Adds **per-channel remap/mute/solo/invert** plus basic **Profiles** for quick switching.
+- Includes **calibration signals** (sine/pink/white + sweep), **drag-to-remap** visual mapping, and **round-trip latency measurement** (with a mic/line-in loopback).
 
 ## Project
 - App + UI + config: `cm6206_dual_router/`
