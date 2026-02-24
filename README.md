@@ -19,6 +19,7 @@ It’s designed to avoid driver/registry hacks and to not fight Windows default-
 
 ## Where the app lives
 - App + UI + config: `cm6206_dual_router/`
+- Minecraft telemetry -> haptic audio buses (SimHub-style engine): `minecraft_haptic_engine/`
 - Vendor bundle reference (optional / local): `cm6206_extracted/`
 
 For full usage details, see `cm6206_dual_router/README.md`.
