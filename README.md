@@ -1,46 +1,19 @@
-# better sound (CM6206 + bass shakers)
+# CM6206 dual-input bass shaker router
 
-This workspace contains a few different approaches to using a **CM6206 USB 7.1** device for bass shakers (and avoiding the vendor installer/control panel when possible).
+This repo provides a simple Windows app that:
+- Captures **two Windows playback devices** (your “Music” + “Shaker” virtual outputs) via WASAPI loopback.
+- Routes/mixes them into **one CM6206 7.1 output**.
+- Includes a **tabbed UI** with **per-channel trims** (FL/FR/FC/LFE/BL/BR/SL/SR).
 
-## Pick what you want to use
+## Project
+- App + UI + config: `cm6206_dual_router/`
+- Optional local reference (not in git): `cm6206_extracted/` (vendor bundle)
 
-### Option A (recommended): the router app (2 virtual outputs → 1 CM6206 7.1)
-Folder: `cm6206_dual_router/`
-- Captures **two Windows playback devices** (usually Voicemeeter virtual outputs) via WASAPI loopback.
-- Mixes/routes them into **one CM6206 7.1 output**, with **bass shaker filtering + 7.1 distribution**.
-- Does **not** need a custom kernel driver (so it’s installable on Windows 11 without test mode).
-
-Start here: `cm6206_dual_router/README.md`
-
-### Option B: driver-only install (no vendor setup UI)
-Folder: `cm6206_driver_only/`
-- A “Have Disk…” style package to install the existing **signed** CM6206 driver without running the vendor setup UI.
-
-Note: the actual vendor driver payload files are intentionally **not committed** to git (see `.gitignore`).
-
-Start here: `cm6206_driver_only/README.md`
-
-### Option C: notes/config for Voicemeeter + Equalizer APO
-File: `cm6206--modded`
-- A step-by-step routing/EQ guide for distributing bass to 7.1 channels.
-
-### Option D: extracted vendor bundle (for reference)
-Folder: `cm6206_extracted/`
-- Original extracted installer files used for inspection/tweaks.
-
-Note: this folder is intentionally **not committed** to git (see `.gitignore`).
-
-## Folder map
-- `cm6206_dual_router/` — source code for the routing app
-- `cm6206_driver_only/` — manual driver install package (signed driver)
-- `cm6206_custom_driver_project/` — planning notes for a true custom driver path
-- `cm6206_extracted/` — extracted vendor installer contents
-
-## Requirements
-- For `cm6206_dual_router/`: install **.NET 8 SDK (x64)** from https://dotnet.microsoft.com/download/dotnet/8.0
+## Requirements (local build)
+- Install **.NET 8 SDK (x64)**: https://dotnet.microsoft.com/download/dotnet/8.0
 
 ## Prebuilt EXE (GitHub Actions)
-- This repo includes a GitHub Actions workflow that publishes a self-contained `win-x64` single-file build.
-- On GitHub: go to **Actions** → latest **build-windows** run → download artifact `cm6206_dual_router_win-x64`.
-- If you create a tag like `v1.0.0`, the workflow also attaches the files to a GitHub Release.
+- This repo publishes a self-contained `win-x64` single-file build.
+- On GitHub: **Actions** → latest **build-windows** → download artifact `cm6206_dual_router_win-x64`.
+- If you create a tag like `v1.0.0`, the workflow attaches the build to a GitHub Release.
 
