@@ -56,6 +56,7 @@ UI tabs:
 - **DSP**: gains, shaker HP/LP, latency, exclusive-mode toggle
 - **Channels**: per-channel gain, **remap**, mute, invert (plus a quick Side↔Rear swap)
 - **Calibration**: play test tone/noise per channel to verify wiring & mapping
+  - Optional **Voice prompts** checkbox to speak the channel name
 
 Or run the built exe:
 - `bin\\Release\\net8.0-windows\\Cm6206DualRouter.exe --config router.json`

@@ -44,6 +44,7 @@ public sealed class RouterMainForm : Form
     private readonly ComboBox _testTypeCombo = new() { DropDownStyle = ComboBoxStyle.DropDownList };
     private readonly NumericUpDown _testFreq = new() { Minimum = 10, Maximum = 20000, DecimalPlaces = 0, Increment = 10 };
     private readonly NumericUpDown _testLevelDb = new() { Minimum = -60, Maximum = 0, DecimalPlaces = 1, Increment = 1 };
+    private readonly CheckBox _testVoicePrompts = new() { Text = "Voice prompts", AutoSize = true };
     private readonly Button _testStartButton = new() { Text = "Start test" };
     private readonly Button _testStopButton = new() { Text = "Stop test", Enabled = false };
 
@@ -78,7 +79,12 @@ public sealed class RouterMainForm : Form
 
         Controls.Add(tabs);
 
-        FormClosing += (_, _) => StopRouter();
+        FormClosing += (_, _) =>
+        {
+            StopTest();
+            StopRouter();
+            VoicePrompter.Dispose();
+        };
 
         RefreshDeviceLists();
         LoadConfigIntoControls();
@@ -282,13 +288,23 @@ public sealed class RouterMainForm : Form
         layout.Controls.Add(new Label { Text = "Level (dB)", AutoSize = true }, 0, 3);
         layout.Controls.Add(_testLevelDb, 1, 3);
 
+        layout.Controls.Add(_testVoicePrompts, 1, 4);
+
         var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, AutoSize = true };
         buttons.Controls.Add(_testStartButton);
         buttons.Controls.Add(_testStopButton);
-        layout.Controls.Add(buttons, 1, 4);
+        layout.Controls.Add(buttons, 1, 5);
 
         _testStartButton.Click += (_, _) => StartTest();
         _testStopButton.Click += (_, _) => StopTest();
+
+        _testChannelCombo.SelectedIndexChanged += (_, _) =>
+        {
+            if (_tonePlayer is null) return;
+            _tonePlayer.SetChannel(_testChannelCombo.SelectedIndex);
+            if (_testVoicePrompts.Checked)
+                VoicePrompter.Speak(ChannelNames[_testChannelCombo.SelectedIndex]);
+        };
 
         page.Controls.Add(layout);
         return page;
@@ -347,6 +363,8 @@ public sealed class RouterMainForm : Form
             _channelMute[i].Checked = mute[i];
             _channelInvert[i].Checked = invert[i];
         }
+
+        _testVoicePrompts.Checked = _config.EnableVoicePrompts;
     }
 
     private void SaveConfigFromControls()
@@ -363,6 +381,8 @@ public sealed class RouterMainForm : Form
 
         _config.LatencyMs = (int)_latencyMs.Value;
         _config.UseCenterChannel = _useCenter.Checked;
+
+        _config.EnableVoicePrompts = _testVoicePrompts.Checked;
 
         var channel = new float[8];
         for (var i = 0; i < 8; i++)
@@ -411,6 +431,9 @@ public sealed class RouterMainForm : Form
             _tonePlayer.SetFrequency((float)_testFreq.Value);
             _tonePlayer.SetLevelDb((float)_testLevelDb.Value);
             _tonePlayer.Start();
+
+            if (_testVoicePrompts.Checked)
+                VoicePrompter.Speak(ChannelNames[_testChannelCombo.SelectedIndex]);
 
             _testStartButton.Enabled = false;
             _testStopButton.Enabled = true;

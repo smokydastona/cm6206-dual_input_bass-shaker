@@ -21,6 +21,7 @@
 
   "useCenterChannel": false,
   "useExclusiveMode": false,
+  "enableVoicePrompts": true,
   "latencyMs": 50,
 
   "channelGainsDb": [

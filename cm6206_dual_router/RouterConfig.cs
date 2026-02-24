@@ -53,6 +53,9 @@ public sealed class RouterConfig
     [JsonPropertyName("useExclusiveMode")]
     public bool UseExclusiveMode { get; set; } = false;
 
+    [JsonPropertyName("enableVoicePrompts")]
+    public bool EnableVoicePrompts { get; set; } = true;
+
     // Per-output-channel trims (dB). Order is WAVEFORMATEXTENSIBLE 7.1:
     // FL, FR, FC, LFE, BL, BR, SL, SR
     // If null, defaults to 0 dB on all channels.
