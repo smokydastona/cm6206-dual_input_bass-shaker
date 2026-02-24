@@ -1,0 +1,27 @@
+# --- Do not commit vendor driver payloads ---
+# (These files are proprietary/vendor-supplied and also cause long-path issues on Windows)
+cm6206_extracted/
+[CMedia CM6206] Windows USB 7.1 Audio Adapter.zip
+cm6206_driver_only/package/
+
+# Common binary installer/archive formats
+*.cab
+*.hdr
+*.ex_
+*.exe
+*.msi
+*.zip
+
+# Driver binaries
+*.sys
+*.cat
+*.dll
+
+# --- .NET build outputs ---
+**/bin/
+**/obj/
+
+# Visual Studio / VS Code
+.vs/
+*.user
+*.suo

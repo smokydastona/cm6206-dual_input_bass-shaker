@@ -1,0 +1,176 @@
+
+CM6206 + Voicemeeter + Bass Shakers (7 transducers over 7.1)
+===========================================================
+
+Goal
+----
+1) CM6206 should NOT force itself as Windows default audio device.
+2) Windows audio can play normally to your main speakers/headphones.
+3) The same audio is also sent to the CM6206, but filtered to BASS ONLY and distributed across its 7.1 outputs to match your amps/transducers.
+
+Your wiring (CM6206 -> amps)
+---------------------------
+AMP#1 (2.1 seat + sub)
+- Front Left  (FL)  -> Seat Left transducer
+- Front Right (FR)  -> Seat Right transducer
+- Sub/LFE     (LFE) -> 50W sub transducer
+
+AMP#2 (back)
+- Rear Left   (RL)  -> Back Left transducer
+- Rear Right  (RR)  -> Back Right transducer
+
+AMP#3 (feet)
+- Side Left   (SL) OR Center (FC) -> Feet Left transducer
+- Side Right  (SR)              -> Feet Right transducer
+
+Recommended: use Side Left/Side Right for the feet pair (SL/SR).
+
+
+Part A — Stop the "make me default" behavior
+--------------------------------------------
+Best: do NOT install the vendor control-panel (Xear Audio Center) at all.
+If you must install it, the mod in this workspace changes its config so it should not try to control default devices.
+
+Also on Windows:
+- Settings -> System -> Sound -> choose your real listening device as Default, not the CM6206.
+- Sound Control Panel -> Communications tab -> set "Do nothing".
+
+
+Part B — Set CM6206 to 7.1 correctly
+------------------------------------
+1) Control Panel -> Sound -> Playback -> select the CM6206 "Speakers" device -> Configure
+2) Pick "7.1 Surround".
+3) Enable the speakers you actually use:
+	- Front L/R, Rear L/R, Side L/R, Subwoofer
+	- Center can be off (unless you decide to use Center for Feet Left).
+4) In Properties -> Advanced:
+	- Set 48000 Hz (48 kHz) if possible.
+	- Disable Exclusive Mode if you get device-grab issues (optional, depends on your apps).
+
+
+Part C — Voicemeeter routing (keeps Windows default stable)
+----------------------------------------------------------
+1) Install Voicemeeter Banana (or Potato).
+2) Set Windows Default Output to "Voicemeeter Input (VAIO)".
+3) In Voicemeeter:
+	- A1 = your real speakers/headphones (what you actually listen to)
+	- A2 = CM6206 (WDM)
+	- On the VAIO strip (the one that receives Windows audio), enable BOTH A1 and A2.
+
+Result:
+- Windows audio goes to A1 (normal listening) and A2 (CM6206) at the same time.
+- Next we make A2 (CM6206) bass-only and distribute it to the 7.1 channels.
+
+
+Part D — Equalizer APO (bass-only + channel distribution)
+--------------------------------------------------------
+This is the cleanest way to:
+- remove mids/highs so shakers don’t buzz,
+- create mono LFE,
+- copy bass to rear/side channels so all transducers can run from normal stereo audio.
+
+1) Install Equalizer APO.
+2) Run "Configurator" (comes with Equalizer APO) and check ONLY the CM6206 playback endpoint (Speakers).
+3) Reboot if it asks.
+4) Edit the Equalizer APO config for the CM6206 device.
+
+Recommended config (bass-only shakers; directional L/R where possible)
+---------------------------------------------------------------------
+Paste this into the CM6206’s Equalizer APO config. If the channel names differ on your system,
+see the troubleshooting section at the end.
+
+----- BEGIN EQUALIZER APO CONFIG -----
+# Keep some headroom (we will sum channels for LFE)
+Preamp: -10 dB
+
+# Work on the input stereo channels (Front Left/Right)
+Channel: FL FR
+
+# Remove subsonic junk (protects transducers)
+Filter: ON HP Fc 20 Hz
+
+# Low-pass for shakers. Two stages = steeper rolloff.
+Filter: ON LP Fc 80 Hz
+Filter: ON LP Fc 80 Hz
+
+# Optional: if you want a more "thumpy" feel, bump ~45 Hz a bit
+# Filter: ON PK Fc 45 Hz Gain 3 dB Q 1.0
+
+# Copy bass to the other channels you’re using
+# Rear pair -> back transducers
+Copy: RL=FL
+Copy: RR=FR
+
+# Side pair -> feet transducers
+Copy: SL=FL
+Copy: SR=FR
+
+# LFE should be mono (sum L+R). Reduce gain to avoid clipping.
+Copy: LFE=FL+FR
+Channel: LFE
+Gain: -6 dB
+
+# If you want Center used (optional), uncomment and wire Feet Left to Center
+# Copy: FC=0.5*FL+0.5*FR
+# Channel: FC
+# Gain: -3 dB
+----- END EQUALIZER APO CONFIG -----
+
+
+Level tuning (important)
+------------------------
+You’ll want different intensity per location:
+- Seat usually strongest
+- Back medium
+- Feet usually weaker
+
+In Equalizer APO you can add per-channel Gain after the Copy lines, e.g.:
+  Channel: RL RR
+  Gain: -3 dB
+  Channel: SL SR
+  Gain: -6 dB
+
+
+Troubleshooting
+---------------
+1) If only the Seat transducers work (Front L/R) but Rear/Side are silent:
+	- Your source is stereo (expected) and the Copy lines didn’t map to your channel names.
+	- Try these alternate rear names (some setups use BL/BR instead of RL/RR):
+		 Copy: BL=FL
+		 Copy: BR=FR
+
+2) If you hear mids/highs in the shakers:
+	- Lower the low-pass Fc (try 70 Hz, 60 Hz).
+	- Add another LP stage (a third LP at same Fc).
+
+3) If the CM6206 still becomes default device:
+	- Don’t install the vendor control panel; install driver-only.
+	- Keep Windows default set to Voicemeeter Input.
+
+
+Quick channel verification (do this once)
+----------------------------------------
+Use Windows’ built-in speaker test so you KNOW every jack->amp->transducer is correct.
+
+1) Control Panel -> Sound -> Playback -> CM6206 Speakers -> Configure -> Test
+2) When Windows plays each channel, confirm the correct transducer shakes:
+	- Front Left  (FL)  = Seat Left
+	- Front Right (FR)  = Seat Right
+	- Subwoofer   (LFE) = 50W sub transducer
+	- Rear Left   (RL)  = Back Left
+	- Rear Right  (RR)  = Back Right
+	- Side Left   (SL)  = Feet Left
+	- Side Right  (SR)  = Feet Right
+3) If any are swapped, fix it physically (cables) first. Software remaps are possible but get confusing fast.
+
+
+Fallback: if you don’t want Voicemeeter
+---------------------------------------
+If you ONLY care about system audio feeding the shakers (and you don’t need fancy mixing):
+1) Set Windows Default Output = your normal speakers/headset.
+2) Install VB-Audio "Virtual Cable" (or any audio repeater tool).
+3) Use a repeater to duplicate the default audio stream to the CM6206.
+4) Keep Equalizer APO on CM6206 to do the bass-only filtering + channel distribution.
+
+Voicemeeter is still the easiest because it replaces the repeater step and keeps routing stable.
+
