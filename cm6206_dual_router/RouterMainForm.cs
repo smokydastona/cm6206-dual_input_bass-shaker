@@ -24,6 +24,12 @@ public sealed class RouterMainForm : Form
 
     private readonly TrackBar[] _channelSliders = new TrackBar[8];
     private readonly Label[] _channelLabels = new Label[8];
+    private readonly CheckBox[] _channelMute = new CheckBox[8];
+    private readonly CheckBox[] _channelInvert = new CheckBox[8];
+    private readonly ComboBox[] _channelMap = new ComboBox[8];
+
+    private readonly Button _identityMapButton = new() { Text = "Identity map" };
+    private readonly Button _swapSideRearButton = new() { Text = "Swap Side/Rear" };
 
     private readonly Button _refreshButton = new() { Text = "Refresh devices" };
     private readonly Button _saveButton = new() { Text = "Save config" };
@@ -32,6 +38,14 @@ public sealed class RouterMainForm : Form
 
     private RouterConfig _config;
     private WasapiDualRouter? _router;
+    private TonePlayer? _tonePlayer;
+
+    private readonly ComboBox _testChannelCombo = new() { DropDownStyle = ComboBoxStyle.DropDownList };
+    private readonly ComboBox _testTypeCombo = new() { DropDownStyle = ComboBoxStyle.DropDownList };
+    private readonly NumericUpDown _testFreq = new() { Minimum = 10, Maximum = 20000, DecimalPlaces = 0, Increment = 10 };
+    private readonly NumericUpDown _testLevelDb = new() { Minimum = -60, Maximum = 0, DecimalPlaces = 1, Increment = 1 };
+    private readonly Button _testStartButton = new() { Text = "Start test" };
+    private readonly Button _testStopButton = new() { Text = "Stop test", Enabled = false };
 
     private static readonly string[] ChannelNames =
     [
@@ -60,6 +74,7 @@ public sealed class RouterMainForm : Form
         tabs.TabPages.Add(BuildDevicesTab());
         tabs.TabPages.Add(BuildDspTab());
         tabs.TabPages.Add(BuildChannelsTab());
+        tabs.TabPages.Add(BuildCalibrationTab());
 
         Controls.Add(tabs);
 
@@ -150,20 +165,45 @@ public sealed class RouterMainForm : Form
     {
         var page = new TabPage("Channels");
 
+        var root = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 2,
+            Padding = new Padding(12)
+        };
+
+        var buttons = new FlowLayoutPanel { Dock = DockStyle.Top, FlowDirection = FlowDirection.LeftToRight, AutoSize = true };
+        buttons.Controls.Add(_identityMapButton);
+        buttons.Controls.Add(_swapSideRearButton);
+        root.Controls.Add(buttons, 0, 0);
+
+        _identityMapButton.Click += (_, _) => SetIdentityMap();
+        _swapSideRearButton.Click += (_, _) => SwapSideRear();
+
         var panel = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
-            ColumnCount = 2,
-            RowCount = 8,
-            Padding = new Padding(12),
+            ColumnCount = 5,
+            RowCount = 9,
             AutoScroll = true
         };
-        panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 220));
-        panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+
+        panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 170)); // output label
+        panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 170)); // source select
+        panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));  // gain slider
+        panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 70));  // mute
+        panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 80));  // invert
+
+        panel.Controls.Add(new Label { Text = "Output", AutoSize = true, Font = new Font(Font, FontStyle.Bold) }, 0, 0);
+        panel.Controls.Add(new Label { Text = "Source", AutoSize = true, Font = new Font(Font, FontStyle.Bold) }, 1, 0);
+        panel.Controls.Add(new Label { Text = "Gain", AutoSize = true, Font = new Font(Font, FontStyle.Bold) }, 2, 0);
+        panel.Controls.Add(new Label { Text = "Mute", AutoSize = true, Font = new Font(Font, FontStyle.Bold) }, 3, 0);
+        panel.Controls.Add(new Label { Text = "Invert", AutoSize = true, Font = new Font(Font, FontStyle.Bold) }, 4, 0);
 
         for (var i = 0; i < 8; i++)
         {
-            _channelLabels[i] = new Label { Text = $"{ChannelNames[i]}: 0.0 dB", AutoSize = true };
+            _channelLabels[i] = new Label { Text = $"0.0 dB", AutoSize = true };
             _channelSliders[i] = new TrackBar
             {
                 Minimum = -240,
@@ -175,17 +215,82 @@ public sealed class RouterMainForm : Form
                 Dock = DockStyle.Fill
             };
 
+            _channelMute[i] = new CheckBox { Text = "Mute", AutoSize = true };
+            _channelInvert[i] = new CheckBox { Text = "Invert", AutoSize = true };
+
+            _channelMap[i] = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 150 };
+            foreach (var n in ChannelNames) _channelMap[i].Items.Add(n);
+
             var idx = i;
             _channelSliders[i].Scroll += (_, _) =>
             {
-                _channelLabels[idx].Text = $"{ChannelNames[idx]}: {(_channelSliders[idx].Value / 10.0):0.0} dB";
+                _channelLabels[idx].Text = $"{(_channelSliders[idx].Value / 10.0):0.0} dB";
             };
 
-            panel.Controls.Add(_channelLabels[i], 0, i);
-            panel.Controls.Add(_channelSliders[i], 1, i);
+            panel.Controls.Add(new Label { Text = ChannelNames[i], AutoSize = true }, 0, i + 1);
+            panel.Controls.Add(_channelMap[i], 1, i + 1);
+
+            var gainPanel = new TableLayoutPanel { ColumnCount = 2, Dock = DockStyle.Fill };
+            gainPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            gainPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 80));
+            gainPanel.Controls.Add(_channelSliders[i], 0, 0);
+            gainPanel.Controls.Add(_channelLabels[i], 1, 0);
+            panel.Controls.Add(gainPanel, 2, i + 1);
+
+            panel.Controls.Add(_channelMute[i], 3, i + 1);
+            panel.Controls.Add(_channelInvert[i], 4, i + 1);
         }
 
-        page.Controls.Add(panel);
+        root.Controls.Add(panel, 0, 1);
+        page.Controls.Add(root);
+        return page;
+    }
+
+    private TabPage BuildCalibrationTab()
+    {
+        var page = new TabPage("Calibration");
+
+        var layout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 2,
+            RowCount = 8,
+            Padding = new Padding(12),
+            AutoSize = true
+        };
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 180));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+
+        foreach (var n in ChannelNames) _testChannelCombo.Items.Add(n);
+        _testChannelCombo.SelectedIndex = 0;
+
+        _testTypeCombo.Items.AddRange(new object[] { ToneType.Sine, ToneType.PinkNoise, ToneType.WhiteNoise });
+        _testTypeCombo.SelectedItem = ToneType.Sine;
+
+        _testFreq.Value = 440;
+        _testLevelDb.Value = -18;
+
+        layout.Controls.Add(new Label { Text = "Channel", AutoSize = true }, 0, 0);
+        layout.Controls.Add(_testChannelCombo, 1, 0);
+
+        layout.Controls.Add(new Label { Text = "Signal", AutoSize = true }, 0, 1);
+        layout.Controls.Add(_testTypeCombo, 1, 1);
+
+        layout.Controls.Add(new Label { Text = "Frequency (Hz)", AutoSize = true }, 0, 2);
+        layout.Controls.Add(_testFreq, 1, 2);
+
+        layout.Controls.Add(new Label { Text = "Level (dB)", AutoSize = true }, 0, 3);
+        layout.Controls.Add(_testLevelDb, 1, 3);
+
+        var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, AutoSize = true };
+        buttons.Controls.Add(_testStartButton);
+        buttons.Controls.Add(_testStopButton);
+        layout.Controls.Add(buttons, 1, 4);
+
+        _testStartButton.Click += (_, _) => StartTest();
+        _testStopButton.Click += (_, _) => StopTest();
+
+        page.Controls.Add(layout);
         return page;
     }
 
@@ -226,13 +331,21 @@ public sealed class RouterMainForm : Form
         _useCenter.Checked = _config.UseCenterChannel;
 
         var gains = _config.ChannelGainsDb ?? new float[8];
+        var map = _config.OutputChannelMap ?? [0, 1, 2, 3, 4, 5, 6, 7];
+        var mute = _config.ChannelMute ?? [false, false, false, false, false, false, false, false];
+        var invert = _config.ChannelInvert ?? [false, false, false, false, false, false, false, false];
         for (var i = 0; i < 8; i++)
         {
             var db = gains[i];
             var tenths = (int)Math.Round(db * 10.0);
             tenths = Math.Clamp(tenths, _channelSliders[i].Minimum, _channelSliders[i].Maximum);
             _channelSliders[i].Value = tenths;
-            _channelLabels[i].Text = $"{ChannelNames[i]}: {(tenths / 10.0):0.0} dB";
+            _channelLabels[i].Text = $"{(tenths / 10.0):0.0} dB";
+
+            var src = Math.Clamp(map[i], 0, 7);
+            _channelMap[i].SelectedIndex = src;
+            _channelMute[i].Checked = mute[i];
+            _channelInvert[i].Checked = invert[i];
         }
     }
 
@@ -258,12 +371,73 @@ public sealed class RouterMainForm : Form
         }
         _config.ChannelGainsDb = channel;
 
+        var map = new int[8];
+        var mute = new bool[8];
+        var invert = new bool[8];
+        for (var i = 0; i < 8; i++)
+        {
+            map[i] = _channelMap[i].SelectedIndex < 0 ? i : _channelMap[i].SelectedIndex;
+            mute[i] = _channelMute[i].Checked;
+            invert[i] = _channelInvert[i].Checked;
+        }
+        _config.OutputChannelMap = map;
+        _config.ChannelMute = mute;
+        _config.ChannelInvert = invert;
+
         _config.Validate();
 
         var options = new JsonSerializerOptions { WriteIndented = true };
         File.WriteAllText(_configPath, JsonSerializer.Serialize(_config, options));
 
         MessageBox.Show(this, "Saved.", "CM6206 Dual Router", MessageBoxButtons.OK, MessageBoxIcon.Information);
+    }
+
+    private void StartTest()
+    {
+        if (_tonePlayer is not null)
+            return;
+
+        try
+        {
+            // Don’t run router and test simultaneously.
+            StopRouter();
+
+            SaveConfigFromControls();
+            _config = RouterConfig.Load(_configPath);
+
+            _tonePlayer = new TonePlayer(_config);
+            _tonePlayer.SetChannel(_testChannelCombo.SelectedIndex);
+            _tonePlayer.SetType((ToneType)_testTypeCombo.SelectedItem!);
+            _tonePlayer.SetFrequency((float)_testFreq.Value);
+            _tonePlayer.SetLevelDb((float)_testLevelDb.Value);
+            _tonePlayer.Start();
+
+            _testStartButton.Enabled = false;
+            _testStopButton.Enabled = true;
+        }
+        catch (Exception ex)
+        {
+            StopTest();
+            MessageBox.Show(this, ex.Message, "Failed to start test", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    private void StopTest()
+    {
+        if (_tonePlayer is null)
+            return;
+
+        try
+        {
+            _tonePlayer.Stop();
+            _tonePlayer.Dispose();
+        }
+        finally
+        {
+            _tonePlayer = null;
+            _testStartButton.Enabled = true;
+            _testStopButton.Enabled = false;
+        }
     }
 
     private void StartRouter()
@@ -324,5 +498,21 @@ public sealed class RouterMainForm : Form
                 return;
             }
         }
+    }
+
+    private void SetIdentityMap()
+    {
+        for (var i = 0; i < 8; i++)
+            _channelMap[i].SelectedIndex = i;
+    }
+
+    private void SwapSideRear()
+    {
+        // Output channels are: 4 BL,5 BR,6 SL,7 SR.
+        // Swap source assignment between rear and side.
+        _channelMap[4].SelectedIndex = 6;
+        _channelMap[5].SelectedIndex = 7;
+        _channelMap[6].SelectedIndex = 4;
+        _channelMap[7].SelectedIndex = 5;
     }
 }

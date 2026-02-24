@@ -50,11 +50,26 @@ public sealed class RouterConfig
     [JsonPropertyName("useCenterChannel")]
     public bool UseCenterChannel { get; set; } = false;
 
+    [JsonPropertyName("useExclusiveMode")]
+    public bool UseExclusiveMode { get; set; } = false;
+
     // Per-output-channel trims (dB). Order is WAVEFORMATEXTENSIBLE 7.1:
     // FL, FR, FC, LFE, BL, BR, SL, SR
     // If null, defaults to 0 dB on all channels.
     [JsonPropertyName("channelGainsDb")]
     public float[]? ChannelGainsDb { get; set; } = null;
+
+    // Output channel mapping (indices 0..7). Each output channel picks a source channel.
+    // Default is identity: [0,1,2,3,4,5,6,7]
+    [JsonPropertyName("outputChannelMap")]
+    public int[]? OutputChannelMap { get; set; } = null;
+
+    // Per-output-channel mute / phase invert. If null, defaults to false for all.
+    [JsonPropertyName("channelMute")]
+    public bool[]? ChannelMute { get; set; } = null;
+
+    [JsonPropertyName("channelInvert")]
+    public bool[]? ChannelInvert { get; set; } = null;
 
     [JsonPropertyName("latencyMs")]
     public int LatencyMs { get; set; } = 50;
@@ -100,6 +115,22 @@ public sealed class RouterConfig
 
         if (ChannelGainsDb is not null && ChannelGainsDb.Length != 8)
             throw new InvalidOperationException("channelGainsDb must be an array of 8 floats (FL,FR,FC,LFE,BL,BR,SL,SR)");
+
+        if (OutputChannelMap is not null)
+        {
+            if (OutputChannelMap.Length != 8)
+                throw new InvalidOperationException("outputChannelMap must be an array of 8 ints");
+            for (var i = 0; i < 8; i++)
+            {
+                if (OutputChannelMap[i] < 0 || OutputChannelMap[i] > 7)
+                    throw new InvalidOperationException("outputChannelMap values must be in range 0..7");
+            }
+        }
+
+        if (ChannelMute is not null && ChannelMute.Length != 8)
+            throw new InvalidOperationException("channelMute must be an array of 8 bools");
+        if (ChannelInvert is not null && ChannelInvert.Length != 8)
+            throw new InvalidOperationException("channelInvert must be an array of 8 bools");
 
         if (MusicHighPassHz is not null && MusicLowPassHz is not null)
         {

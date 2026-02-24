@@ -76,7 +76,8 @@ public sealed class WasapiDualRouter : IDisposable
 
         var waveProvider = new SampleToWaveProvider(router);
 
-        _output = new WasapiOut(_outputDevice, AudioClientShareMode.Shared, true, config.LatencyMs);
+        var shareMode = config.UseExclusiveMode ? AudioClientShareMode.Exclusive : AudioClientShareMode.Shared;
+        _output = new WasapiOut(_outputDevice, shareMode, true, config.LatencyMs);
         _output.Init(waveProvider);
     }
 

@@ -23,6 +23,9 @@ public sealed class RouterSampleProvider : ISampleProvider
     private readonly float _sideGain;
 
     private readonly float[] _channelGains;
+    private readonly int[] _channelMap;
+    private readonly bool[] _channelMute;
+    private readonly bool[] _channelInvert;
 
     private readonly BiQuadFilter _shakerHpL;
     private readonly BiQuadFilter _shakerHpR;
@@ -65,6 +68,18 @@ public sealed class RouterSampleProvider : ISampleProvider
         {
             for (var i = 0; i < 8; i++) _channelGains[i] = DbToGain(config.ChannelGainsDb[i]);
         }
+
+        _channelMap = config.OutputChannelMap is null
+            ? [0, 1, 2, 3, 4, 5, 6, 7]
+            : config.OutputChannelMap.ToArray();
+
+        _channelMute = config.ChannelMute is null
+            ? [false, false, false, false, false, false, false, false]
+            : config.ChannelMute.ToArray();
+
+        _channelInvert = config.ChannelInvert is null
+            ? [false, false, false, false, false, false, false, false]
+            : config.ChannelInvert.ToArray();
 
         _shakerHpL = BiQuadFilter.HighPassFilter(_sampleRate, config.ShakerHighPassHz, 0.707f);
         _shakerHpR = BiQuadFilter.HighPassFilter(_sampleRate, config.ShakerHighPassHz, 0.707f);
@@ -161,15 +176,28 @@ public sealed class RouterSampleProvider : ISampleProvider
 
                 var outBase = offset + (frame * outChannels);
 
-                // FL, FR, FC, LFE, BL, BR, SL, SR
-                buffer[outBase + 0] = Clamp(frontL * _channelGains[0]);
-                buffer[outBase + 1] = Clamp(frontR * _channelGains[1]);
-                buffer[outBase + 2] = Clamp(center * _channelGains[2]);
-                buffer[outBase + 3] = Clamp(lfe * _channelGains[3]);
-                buffer[outBase + 4] = Clamp(backL * _channelGains[4]);
-                buffer[outBase + 5] = Clamp(backR * _channelGains[5]);
-                buffer[outBase + 6] = Clamp(sideL * _channelGains[6]);
-                buffer[outBase + 7] = Clamp(sideR * _channelGains[7]);
+                // Source order (raw): FL, FR, FC, LFE, BL, BR, SL, SR
+                Span<float> raw = stackalloc float[8];
+                raw[0] = frontL;
+                raw[1] = frontR;
+                raw[2] = center;
+                raw[3] = lfe;
+                raw[4] = backL;
+                raw[5] = backR;
+                raw[6] = sideL;
+                raw[7] = sideR;
+
+                for (var outCh = 0; outCh < 8; outCh++)
+                {
+                    var srcCh = _channelMap[outCh];
+                    var sample = raw[srcCh];
+
+                    if (_channelInvert[outCh]) sample = -sample;
+                    if (_channelMute[outCh]) sample = 0f;
+
+                    sample *= _channelGains[outCh];
+                    buffer[outBase + outCh] = Clamp(sample);
+                }
             }
 
             return framesRequested * outChannels;

@@ -20,6 +20,7 @@
   "sideGainDb": 0.0,
 
   "useCenterChannel": false,
+  "useExclusiveMode": false,
   "latencyMs": 50,
 
   "channelGainsDb": [
@@ -31,5 +32,9 @@
     0.0,
     0.0,
     0.0
-  ]
+  ],
+
+  "outputChannelMap": [0, 1, 2, 3, 4, 5, 6, 7],
+  "channelMute": [false, false, false, false, false, false, false, false],
+  "channelInvert": [false, false, false, false, false, false, false, false]
 }

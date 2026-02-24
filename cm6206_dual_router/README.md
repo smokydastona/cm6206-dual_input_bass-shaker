@@ -51,6 +51,12 @@ cd "cm6206_dual_router"
 dotnet run -c Release -- --ui --config router.json
 ```
 
+UI tabs:
+- **Devices**: pick music/shaker/output endpoints + Start/Stop
+- **DSP**: gains, shaker HP/LP, latency, exclusive-mode toggle
+- **Channels**: per-channel gain, **remap**, mute, invert (plus a quick Side↔Rear swap)
+- **Calibration**: play test tone/noise per channel to verify wiring & mapping
+
 Or run the built exe:
 - `bin\\Release\\net8.0-windows\\Cm6206DualRouter.exe --config router.json`
 
@@ -66,6 +72,9 @@ Or run the built exe:
 - `useCenterChannel`: optional mono feed to center.
 - `latencyMs`: output latency (lower = snappier, higher = safer).
 - `channelGainsDb`: per-channel trims in dB for FL,FR,FC,LFE,BL,BR,SL,SR.
+- `outputChannelMap`: per-channel routing map (indices 0..7) to fix Side/Rear swap etc.
+- `channelMute`, `channelInvert`: per-channel boolean flags.
+- `useExclusiveMode`: tries WASAPI exclusive mode (can fail if the device/format isn’t supported).
 
 ## Troubleshooting
 - If you hear feedback/echo: don’t route the CM6206 output back into one of the input virtual devices.
