@@ -101,7 +101,7 @@ public sealed class RouterConfig
     [JsonPropertyName("latencyMs")]
     public int LatencyMs { get; set; } = 50;
 
-    public static RouterConfig Load(string path)
+    public static RouterConfig Load(string path, bool validate = true)
     {
         if (!File.Exists(path))
         {
@@ -119,7 +119,8 @@ public sealed class RouterConfig
         var config = JsonSerializer.Deserialize<RouterConfig>(json, options) ??
                      throw new InvalidOperationException("Failed to parse config.");
 
-        config.Validate();
+        if (validate)
+            config.Validate();
         return config;
     }
 

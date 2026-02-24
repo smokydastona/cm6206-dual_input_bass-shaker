@@ -7,6 +7,11 @@ internal static class Program
 {
     public static int Main(string[] args)
     {
+        // Double-click friendly: with no args, launch the UI instead of running headless
+        // (headless mode is still available by providing --config without --ui).
+        if (args.Length == 0)
+            args = ["--ui"];
+
         var configOption = new Option<string>(
             name: "--config",
             description: "Path to router.json",

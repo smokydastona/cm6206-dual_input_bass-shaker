@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Windows.Forms;
 using NAudio.CoreAudioApi;
 using System.Diagnostics;
+using System.IO;
 
 namespace Cm6206DualRouter;
 
@@ -106,7 +107,7 @@ public sealed class RouterMainForm : Form
         Height = 620;
         StartPosition = FormStartPosition.CenterScreen;
 
-        _config = RouterConfig.Load(_configPath);
+        _config = LoadOrCreateConfigForUi(_configPath);
 
         var tabs = new TabControl { Dock = DockStyle.Fill };
 
@@ -202,7 +203,17 @@ public sealed class RouterMainForm : Form
         layout.Controls.Add(buttons, 1, 5);
 
         _refreshButton.Click += (_, _) => RefreshDeviceLists();
-        _saveButton.Click += (_, _) => SaveConfigFromControls();
+        _saveButton.Click += (_, _) =>
+        {
+            try
+            {
+                SaveConfigFromControls();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this, ex.Message, "Save failed", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        };
         _startButton.Click += (_, _) => StartRouter();
         _stopButton.Click += (_, _) => StopRouter();
 
@@ -218,6 +229,33 @@ public sealed class RouterMainForm : Form
 
         page.Controls.Add(layout);
         return page;
+    }
+
+    private static RouterConfig LoadOrCreateConfigForUi(string path)
+    {
+        try
+        {
+            // UI should be able to open even if device names don't match this machine.
+            return RouterConfig.Load(path, validate: false);
+        }
+        catch (FileNotFoundException)
+        {
+            var config = new RouterConfig();
+            try
+            {
+                var dir = Path.GetDirectoryName(Path.GetFullPath(path));
+                if (!string.IsNullOrWhiteSpace(dir))
+                    Directory.CreateDirectory(dir);
+
+                var options = new JsonSerializerOptions { WriteIndented = true };
+                File.WriteAllText(path, JsonSerializer.Serialize(config, options));
+            }
+            catch
+            {
+                // If we can't write a template, still let the UI open with defaults.
+            }
+            return config;
+        }
     }
 
     private void UpdateAutoProfileTimer()
