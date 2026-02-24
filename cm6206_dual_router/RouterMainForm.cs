@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text;
 using System.Windows.Forms;
 using NAudio.CoreAudioApi;
 using System.Diagnostics;
@@ -49,6 +50,20 @@ public sealed class RouterMainForm : Form
     private readonly Button _probeFormatsButton = new() { Text = "Probe exclusive formats" };
     private readonly Button _toggleBlacklistButton = new() { Text = "Toggle blacklist" };
     private readonly ListBox _formatList = new() { IntegralHeight = false, Height = 130 };
+
+    private readonly Button _diagnosticsRefreshButton = new() { Text = "Refresh" };
+    private readonly Button _diagnosticsOpenSoundSettingsButton = new() { Text = "Open Sound settings" };
+    private readonly Button _diagnosticsOpenClassicSoundButton = new() { Text = "Open Sound control panel" };
+    private readonly Button _diagnosticsLaunchVendorButton = new() { Text = "Launch C-Media control panel" };
+    private readonly Label _diagnosticsVendorStatusLabel = new() { Text = "", AutoSize = true };
+    private readonly TextBox _diagnosticsText = new()
+    {
+        Multiline = true,
+        ReadOnly = true,
+        ScrollBars = ScrollBars.Vertical,
+        Dock = DockStyle.Fill,
+        WordWrap = false
+    };
 
     private readonly TrackBar[] _channelSliders = new TrackBar[8];
     private readonly Label[] _channelLabels = new Label[8];
@@ -112,6 +127,7 @@ public sealed class RouterMainForm : Form
         var tabs = new TabControl { Dock = DockStyle.Fill };
 
         tabs.TabPages.Add(BuildDevicesTab());
+        tabs.TabPages.Add(BuildDiagnosticsTab());
         tabs.TabPages.Add(BuildDspTab());
         tabs.TabPages.Add(BuildChannelsTab());
         tabs.TabPages.Add(BuildCalibrationTab());
@@ -135,6 +151,8 @@ public sealed class RouterMainForm : Form
         UpdateFormatInfo();
 
         RefreshProfilesCombo();
+
+        UpdateDiagnostics();
     }
 
     private void WireFormatUi()
@@ -229,6 +247,154 @@ public sealed class RouterMainForm : Form
 
         page.Controls.Add(layout);
         return page;
+    }
+
+    private TabPage BuildDiagnosticsTab()
+    {
+        var page = new TabPage("Diagnostics");
+
+        var layout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 2,
+            Padding = new Padding(12)
+        };
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+
+        var buttons = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            FlowDirection = FlowDirection.LeftToRight,
+            AutoSize = true,
+            WrapContents = true
+        };
+
+        buttons.Controls.Add(_diagnosticsRefreshButton);
+        buttons.Controls.Add(_diagnosticsOpenSoundSettingsButton);
+        buttons.Controls.Add(_diagnosticsOpenClassicSoundButton);
+        buttons.Controls.Add(_diagnosticsLaunchVendorButton);
+        buttons.Controls.Add(_diagnosticsVendorStatusLabel);
+
+        _diagnosticsRefreshButton.Click += (_, _) => UpdateDiagnostics();
+        _diagnosticsOpenSoundSettingsButton.Click += (_, _) =>
+            Process.Start(new ProcessStartInfo("ms-settings:sound") { UseShellExecute = true });
+        _diagnosticsOpenClassicSoundButton.Click += (_, _) =>
+            Process.Start(new ProcessStartInfo("control.exe", "mmsys.cpl") { UseShellExecute = true });
+
+        _diagnosticsLaunchVendorButton.Click += (_, _) =>
+        {
+            if (VendorControlPanel.TryLaunch(out var message))
+            {
+                _diagnosticsVendorStatusLabel.Text = message;
+                return;
+            }
+
+            MessageBox.Show(this, message, "Control panel not found", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            _diagnosticsVendorStatusLabel.Text = message;
+        };
+
+        layout.Controls.Add(buttons, 0, 0);
+        layout.Controls.Add(_diagnosticsText, 0, 1);
+
+        page.Controls.Add(layout);
+        return page;
+    }
+
+    private void UpdateDiagnostics()
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine($"App: CM6206 Dual Router");
+        sb.AppendLine($"Config: {_configPath}");
+        sb.AppendLine($"Router running: {_router is not null}");
+        if (_router is not null)
+            sb.AppendLine($"Effective output: 7.1 float @ {_router.EffectiveSampleRate} Hz ({(_config.UseExclusiveMode ? "Exclusive" : "Shared")})");
+        if (!string.IsNullOrWhiteSpace(_router?.FormatWarning))
+            sb.AppendLine($"Format warning: {_router.FormatWarning}");
+
+        sb.AppendLine();
+        sb.AppendLine("Selected devices:");
+        sb.AppendLine(DescribeRenderDevice(_musicDeviceCombo.SelectedItem as string, "Music input (loopback)"));
+        sb.AppendLine(DescribeRenderDevice(_shakerDeviceCombo.SelectedItem as string, "Shaker input (loopback)"));
+        sb.AppendLine(DescribeRenderDevice(_outputDeviceCombo.SelectedItem as string, "Output"));
+        sb.AppendLine(DescribeCaptureDevice(_latencyInputCombo.SelectedItem as string, "Latency input (capture)"));
+
+        sb.AppendLine();
+        sb.AppendLine("Vendor control panel:");
+        if (VendorControlPanel.TryFindExecutable(out var exePath, out var reason))
+            sb.AppendLine($"Found: {exePath}");
+        else
+            sb.AppendLine($"Not found: {reason}");
+
+        _diagnosticsText.Text = sb.ToString();
+    }
+
+    private static string DescribeRenderDevice(string? friendlyName, string label)
+    {
+        if (string.IsNullOrWhiteSpace(friendlyName))
+            return $"- {label}: (not selected)";
+
+        try
+        {
+            using var device = DeviceHelper.GetRenderDeviceByFriendlyName(friendlyName);
+            return DescribeDeviceCommon(device, label);
+        }
+        catch (Exception ex)
+        {
+            return $"- {label}: {friendlyName} (error: {ex.Message})";
+        }
+    }
+
+    private static string DescribeCaptureDevice(string? friendlyName, string label)
+    {
+        if (string.IsNullOrWhiteSpace(friendlyName))
+            return $"- {label}: (not selected)";
+
+        try
+        {
+            using var device = DeviceHelper.GetCaptureDeviceByFriendlyName(friendlyName);
+            return DescribeDeviceCommon(device, label);
+        }
+        catch (Exception ex)
+        {
+            return $"- {label}: {friendlyName} (error: {ex.Message})";
+        }
+    }
+
+    private static string DescribeDeviceCommon(MMDevice device, string label)
+    {
+        var mix = device.AudioClient.MixFormat;
+        var channels = mix.Channels;
+        var rate = mix.SampleRate;
+        var bits = mix.BitsPerSample;
+        var encoding = mix.Encoding.ToString();
+
+        var extra = "";
+        // NAudio API differs across versions; use reflection if we can.
+        var mask = TryGetChannelMask(mix);
+        if (mask is not null)
+            extra = $", mask=0x{mask.Value:X}";
+
+        return $"- {label}: {device.FriendlyName}\r\n    State={device.State}, MixFormat={channels}ch {rate}Hz {bits}bit {encoding}{extra}";
+    }
+
+    private static int? TryGetChannelMask(NAudio.Wave.WaveFormat waveFormat)
+    {
+        var t = waveFormat.GetType();
+        var prop = t.GetProperty("ChannelMask");
+        if (prop?.PropertyType == typeof(int))
+        {
+            try { return (int?)prop.GetValue(waveFormat); } catch { return null; }
+        }
+
+        var field = t.GetField("dwChannelMask", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+        if (field?.FieldType == typeof(int))
+        {
+            try { return (int?)field.GetValue(waveFormat); } catch { return null; }
+        }
+
+        return null;
     }
 
     private static RouterConfig LoadOrCreateConfigForUi(string path)
