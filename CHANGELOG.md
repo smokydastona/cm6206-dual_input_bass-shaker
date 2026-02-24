@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Added
+- Per-channel output remap + mute/solo/invert.
+- Calibration improvements: voice prompts, auto-step, and presets (including Sine/Pink alternation).
+- Profiles in the UI (Save As / Load / Delete) stored in `%AppData%\\Cm6206DualRouter\\profiles.json`.
+
 ## 2026-02-24
 
 ### Added

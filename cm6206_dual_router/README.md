@@ -53,8 +53,9 @@ dotnet run -c Release -- --ui --config router.json
 
 UI tabs:
 - **Devices**: pick music/shaker/output endpoints + Start/Stop
+-  - Includes simple **Profiles** (Save As / Load / Delete)
 - **DSP**: gains, shaker HP/LP, latency, exclusive-mode toggle
-- **Channels**: per-channel gain, **remap**, mute, invert (plus a quick Side↔Rear swap)
+- **Channels**: per-channel gain, **remap**, mute, **solo**, invert (plus a quick Side↔Rear swap)
 - **Calibration**: play test tone/noise per channel to verify wiring & mapping
   - Optional **Voice prompts** checkbox to speak the channel name
   - Optional **Auto-step channels** mode to cycle FL→…→SR automatically
@@ -76,8 +77,12 @@ Or run the built exe:
 - `latencyMs`: output latency (lower = snappier, higher = safer).
 - `channelGainsDb`: per-channel trims in dB for FL,FR,FC,LFE,BL,BR,SL,SR.
 - `outputChannelMap`: per-channel routing map (indices 0..7) to fix Side/Rear swap etc.
-- `channelMute`, `channelInvert`: per-channel boolean flags.
+- `channelMute`, `channelSolo`, `channelInvert`: per-channel boolean flags.
 - `useExclusiveMode`: tries WASAPI exclusive mode (can fail if the device/format isn’t supported).
+
+## Profiles
+- Profiles are stored at `%AppData%\Cm6206DualRouter\profiles.json`.
+- A profile is just a named snapshot of `router.json` settings (devices, mapping, gains, calibration preferences, etc.).
 
 ## Troubleshooting
 - If you hear feedback/echo: don’t route the CM6206 output back into one of the input virtual devices.

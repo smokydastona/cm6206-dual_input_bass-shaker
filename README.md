@@ -4,6 +4,7 @@ This repo provides a simple Windows app that:
 - Captures **two Windows playback devices** (your “Music” + “Shaker” virtual outputs) via WASAPI loopback.
 - Routes/mixes them into **one CM6206 7.1 output**.
 - Includes a **tabbed UI** with **per-channel trims** (FL/FR/FC/LFE/BL/BR/SL/SR).
+- Adds **per-channel remap/mute/solo/invert** plus basic **Profiles** for quick switching.
 
 ## Project
 - App + UI + config: `cm6206_dual_router/`

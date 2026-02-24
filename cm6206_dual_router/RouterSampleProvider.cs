@@ -26,6 +26,8 @@ public sealed class RouterSampleProvider : ISampleProvider
     private readonly int[] _channelMap;
     private readonly bool[] _channelMute;
     private readonly bool[] _channelInvert;
+    private readonly bool[] _channelSolo;
+    private readonly bool _anySolo;
 
     private readonly BiQuadFilter _shakerHpL;
     private readonly BiQuadFilter _shakerHpR;
@@ -80,6 +82,12 @@ public sealed class RouterSampleProvider : ISampleProvider
         _channelInvert = config.ChannelInvert is null
             ? [false, false, false, false, false, false, false, false]
             : config.ChannelInvert.ToArray();
+
+        _channelSolo = config.ChannelSolo is null
+            ? [false, false, false, false, false, false, false, false]
+            : config.ChannelSolo.ToArray();
+
+        _anySolo = _channelSolo.Any(x => x);
 
         _shakerHpL = BiQuadFilter.HighPassFilter(_sampleRate, config.ShakerHighPassHz, 0.707f);
         _shakerHpR = BiQuadFilter.HighPassFilter(_sampleRate, config.ShakerHighPassHz, 0.707f);
@@ -192,6 +200,7 @@ public sealed class RouterSampleProvider : ISampleProvider
                     var srcCh = _channelMap[outCh];
                     var sample = raw[srcCh];
 
+                    if (_anySolo && !_channelSolo[outCh]) sample = 0f;
                     if (_channelInvert[outCh]) sample = -sample;
                     if (_channelMute[outCh]) sample = 0f;
 

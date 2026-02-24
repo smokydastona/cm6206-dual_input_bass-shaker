@@ -8,6 +8,11 @@ public sealed class RouterMainForm : Form
 {
     private readonly string _configPath;
 
+    private readonly ComboBox _profileCombo = new() { DropDownStyle = ComboBoxStyle.DropDownList };
+    private readonly Button _profileLoadButton = new() { Text = "Load" };
+    private readonly Button _profileSaveAsButton = new() { Text = "Save As" };
+    private readonly Button _profileDeleteButton = new() { Text = "Delete" };
+
     private readonly ComboBox _musicDeviceCombo = new() { DropDownStyle = ComboBoxStyle.DropDownList };
     private readonly ComboBox _shakerDeviceCombo = new() { DropDownStyle = ComboBoxStyle.DropDownList };
     private readonly ComboBox _outputDeviceCombo = new() { DropDownStyle = ComboBoxStyle.DropDownList };
@@ -26,6 +31,7 @@ public sealed class RouterMainForm : Form
     private readonly Label[] _channelLabels = new Label[8];
     private readonly CheckBox[] _channelMute = new CheckBox[8];
     private readonly CheckBox[] _channelInvert = new CheckBox[8];
+    private readonly CheckBox[] _channelSolo = new CheckBox[8];
     private readonly ComboBox[] _channelMap = new ComboBox[8];
 
     private readonly Button _identityMapButton = new() { Text = "Identity map" };
@@ -97,6 +103,8 @@ public sealed class RouterMainForm : Form
 
         RefreshDeviceLists();
         LoadConfigIntoControls();
+
+        RefreshProfilesCombo();
     }
 
     private TabPage BuildDevicesTab()
@@ -107,7 +115,7 @@ public sealed class RouterMainForm : Form
         {
             Dock = DockStyle.Fill,
             ColumnCount = 2,
-            RowCount = 6,
+            RowCount = 7,
             Padding = new Padding(12),
             AutoSize = true
         };
@@ -123,21 +131,93 @@ public sealed class RouterMainForm : Form
         layout.Controls.Add(new Label { Text = "Output device (CM6206)", AutoSize = true }, 0, 2);
         layout.Controls.Add(_outputDeviceCombo, 1, 2);
 
+        layout.Controls.Add(new Label { Text = "Profile", AutoSize = true }, 0, 3);
+        var profileRow = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, AutoSize = true };
+        _profileCombo.Width = 240;
+        profileRow.Controls.Add(_profileCombo);
+        profileRow.Controls.Add(_profileLoadButton);
+        profileRow.Controls.Add(_profileSaveAsButton);
+        profileRow.Controls.Add(_profileDeleteButton);
+        layout.Controls.Add(profileRow, 1, 3);
+
         var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, AutoSize = true };
         buttons.Controls.Add(_refreshButton);
         buttons.Controls.Add(_saveButton);
         buttons.Controls.Add(_startButton);
         buttons.Controls.Add(_stopButton);
 
-        layout.Controls.Add(buttons, 1, 3);
+        layout.Controls.Add(buttons, 1, 4);
 
         _refreshButton.Click += (_, _) => RefreshDeviceLists();
         _saveButton.Click += (_, _) => SaveConfigFromControls();
         _startButton.Click += (_, _) => StartRouter();
         _stopButton.Click += (_, _) => StopRouter();
 
+        _profileLoadButton.Click += (_, _) => LoadSelectedProfileIntoUi();
+        _profileSaveAsButton.Click += (_, _) => SaveCurrentAsNewProfile();
+        _profileDeleteButton.Click += (_, _) => DeleteSelectedProfile();
+
         page.Controls.Add(layout);
         return page;
+    }
+
+    private void RefreshProfilesCombo()
+    {
+        var profiles = ProfileStore.LoadAll();
+        var selected = _profileCombo.SelectedItem as string;
+
+        _profileCombo.Items.Clear();
+        foreach (var p in profiles)
+            _profileCombo.Items.Add(p.Name);
+
+        if (!string.IsNullOrWhiteSpace(selected) && _profileCombo.Items.Contains(selected))
+            _profileCombo.SelectedItem = selected;
+        else if (_profileCombo.Items.Count > 0)
+            _profileCombo.SelectedIndex = 0;
+    }
+
+    private void LoadSelectedProfileIntoUi()
+    {
+        if (_profileCombo.SelectedItem is not string name || string.IsNullOrWhiteSpace(name))
+            return;
+
+        var profile = ProfileStore.LoadAll().FirstOrDefault(p =>
+            string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase));
+        if (profile is null) return;
+
+        _config = profile.Config;
+        _config.Validate();
+        LoadConfigIntoControls();
+        SaveConfigToDisk(showSavedDialog: false);
+    }
+
+    private void SaveCurrentAsNewProfile()
+    {
+        SaveConfigFromControls(showSavedDialog: false);
+
+        var name = PromptDialog.Show("Save Profile", "Profile name:", "Default");
+        if (name is null) return;
+
+        ProfileStore.Upsert(name, _config);
+        RefreshProfilesCombo();
+        _profileCombo.SelectedItem = name;
+    }
+
+    private void DeleteSelectedProfile()
+    {
+        if (_profileCombo.SelectedItem is not string name || string.IsNullOrWhiteSpace(name))
+            return;
+
+        var ok = MessageBox.Show(
+            this,
+            $"Delete profile '{name}'?",
+            "Delete Profile",
+            MessageBoxButtons.YesNo,
+            MessageBoxIcon.Warning);
+        if (ok != DialogResult.Yes) return;
+
+        ProfileStore.Delete(name);
+        RefreshProfilesCombo();
     }
 
     private TabPage BuildDspTab()
@@ -199,7 +279,7 @@ public sealed class RouterMainForm : Form
         var panel = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
-            ColumnCount = 5,
+            ColumnCount = 6,
             RowCount = 9,
             AutoScroll = true
         };
@@ -208,13 +288,15 @@ public sealed class RouterMainForm : Form
         panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 170)); // source select
         panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));  // gain slider
         panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 70));  // mute
+        panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 70));  // solo
         panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 80));  // invert
 
         panel.Controls.Add(new Label { Text = "Output", AutoSize = true, Font = new Font(Font, FontStyle.Bold) }, 0, 0);
         panel.Controls.Add(new Label { Text = "Source", AutoSize = true, Font = new Font(Font, FontStyle.Bold) }, 1, 0);
         panel.Controls.Add(new Label { Text = "Gain", AutoSize = true, Font = new Font(Font, FontStyle.Bold) }, 2, 0);
         panel.Controls.Add(new Label { Text = "Mute", AutoSize = true, Font = new Font(Font, FontStyle.Bold) }, 3, 0);
-        panel.Controls.Add(new Label { Text = "Invert", AutoSize = true, Font = new Font(Font, FontStyle.Bold) }, 4, 0);
+        panel.Controls.Add(new Label { Text = "Solo", AutoSize = true, Font = new Font(Font, FontStyle.Bold) }, 4, 0);
+        panel.Controls.Add(new Label { Text = "Invert", AutoSize = true, Font = new Font(Font, FontStyle.Bold) }, 5, 0);
 
         for (var i = 0; i < 8; i++)
         {
@@ -231,6 +313,7 @@ public sealed class RouterMainForm : Form
             };
 
             _channelMute[i] = new CheckBox { Text = "Mute", AutoSize = true };
+            _channelSolo[i] = new CheckBox { Text = "Solo", AutoSize = true };
             _channelInvert[i] = new CheckBox { Text = "Invert", AutoSize = true };
 
             _channelMap[i] = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 150 };
@@ -253,7 +336,8 @@ public sealed class RouterMainForm : Form
             panel.Controls.Add(gainPanel, 2, i + 1);
 
             panel.Controls.Add(_channelMute[i], 3, i + 1);
-            panel.Controls.Add(_channelInvert[i], 4, i + 1);
+            panel.Controls.Add(_channelSolo[i], 4, i + 1);
+            panel.Controls.Add(_channelInvert[i], 5, i + 1);
         }
 
         root.Controls.Add(panel, 0, 1);
@@ -384,6 +468,7 @@ public sealed class RouterMainForm : Form
         var map = _config.OutputChannelMap ?? [0, 1, 2, 3, 4, 5, 6, 7];
         var mute = _config.ChannelMute ?? [false, false, false, false, false, false, false, false];
         var invert = _config.ChannelInvert ?? [false, false, false, false, false, false, false, false];
+        var solo = _config.ChannelSolo ?? [false, false, false, false, false, false, false, false];
         for (var i = 0; i < 8; i++)
         {
             var db = gains[i];
@@ -395,6 +480,7 @@ public sealed class RouterMainForm : Form
             var src = Math.Clamp(map[i], 0, 7);
             _channelMap[i].SelectedIndex = src;
             _channelMute[i].Checked = mute[i];
+            _channelSolo[i].Checked = solo[i];
             _channelInvert[i].Checked = invert[i];
         }
 
@@ -414,7 +500,7 @@ public sealed class RouterMainForm : Form
         ApplyCalibrationPresetToControls();
     }
 
-    private void SaveConfigFromControls()
+    private void SaveConfigFromControls(bool showSavedDialog = true)
     {
         _config.MusicInputRenderDevice = _musicDeviceCombo.SelectedItem as string ?? _config.MusicInputRenderDevice;
         _config.ShakerInputRenderDevice = _shakerDeviceCombo.SelectedItem as string ?? _config.ShakerInputRenderDevice;
@@ -451,23 +537,31 @@ public sealed class RouterMainForm : Form
 
         var map = new int[8];
         var mute = new bool[8];
+        var solo = new bool[8];
         var invert = new bool[8];
         for (var i = 0; i < 8; i++)
         {
             map[i] = _channelMap[i].SelectedIndex < 0 ? i : _channelMap[i].SelectedIndex;
             mute[i] = _channelMute[i].Checked;
+            solo[i] = _channelSolo[i].Checked;
             invert[i] = _channelInvert[i].Checked;
         }
         _config.OutputChannelMap = map;
         _config.ChannelMute = mute;
+        _config.ChannelSolo = solo;
         _config.ChannelInvert = invert;
 
         _config.Validate();
+        SaveConfigToDisk(showSavedDialog);
+    }
 
+    private void SaveConfigToDisk(bool showSavedDialog)
+    {
         var options = new JsonSerializerOptions { WriteIndented = true };
         File.WriteAllText(_configPath, JsonSerializer.Serialize(_config, options));
 
-        MessageBox.Show(this, "Saved.", "CM6206 Dual Router", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        if (showSavedDialog)
+            MessageBox.Show(this, "Saved.", "CM6206 Dual Router", MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
 
     private void StartTest()

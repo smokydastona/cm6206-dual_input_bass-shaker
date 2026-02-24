@@ -87,6 +87,9 @@ public sealed class RouterConfig
     [JsonPropertyName("channelInvert")]
     public bool[]? ChannelInvert { get; set; } = null;
 
+    [JsonPropertyName("channelSolo")]
+    public bool[]? ChannelSolo { get; set; } = null;
+
     [JsonPropertyName("latencyMs")]
     public int LatencyMs { get; set; } = 50;
 
@@ -154,6 +157,8 @@ public sealed class RouterConfig
             throw new InvalidOperationException("channelMute must be an array of 8 bools");
         if (ChannelInvert is not null && ChannelInvert.Length != 8)
             throw new InvalidOperationException("channelInvert must be an array of 8 bools");
+        if (ChannelSolo is not null && ChannelSolo.Length != 8)
+            throw new InvalidOperationException("channelSolo must be an array of 8 bools");
 
         if (MusicHighPassHz is not null && MusicLowPassHz is not null)
         {
