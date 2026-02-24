@@ -21,6 +21,27 @@ public sealed class RouterMainForm : Form
     private readonly NumericUpDown _profilePollMs = new() { Minimum = 250, Maximum = 5000, DecimalPlaces = 0, Increment = 250, Value = 1000 };
     private readonly System.Windows.Forms.Timer _profilePollTimer = new();
 
+    private readonly System.Windows.Forms.Timer _metersTimer = new();
+    private readonly ProgressBar[] _musicMeters = new ProgressBar[2];
+    private readonly Label[] _musicMeterLabels = new Label[2];
+    private readonly Label[] _musicClipLabels = new Label[2];
+
+    private readonly ProgressBar[] _shakerMeters = new ProgressBar[2];
+    private readonly Label[] _shakerMeterLabels = new Label[2];
+    private readonly Label[] _shakerClipLabels = new Label[2];
+
+    private readonly ProgressBar[] _outputMeters = new ProgressBar[8];
+    private readonly Label[] _outputMeterLabels = new Label[8];
+    private readonly Label[] _outputClipLabels = new Label[8];
+
+    private readonly float[] _meterTmpMusic = new float[2];
+    private readonly float[] _meterTmpShaker = new float[2];
+    private readonly float[] _meterTmpOut = new float[8];
+
+    private readonly float[] _displayMusic = new float[2];
+    private readonly float[] _displayShaker = new float[2];
+    private readonly float[] _displayOut = new float[8];
+
     private string? _lastAutoProfileApplied;
 
     private readonly ComboBox _musicDeviceCombo = new() { DropDownStyle = ComboBoxStyle.DropDownList };
@@ -130,12 +151,15 @@ public sealed class RouterMainForm : Form
         tabs.TabPages.Add(BuildDiagnosticsTab());
         tabs.TabPages.Add(BuildDspTab());
         tabs.TabPages.Add(BuildChannelsTab());
+        tabs.TabPages.Add(BuildMetersTab());
         tabs.TabPages.Add(BuildCalibrationTab());
 
         Controls.Add(tabs);
 
         _autoStepTimer.Tick += (_, _) => AutoStepTick();
         _profilePollTimer.Tick += (_, _) => AutoProfileSwitchTick();
+        _metersTimer.Interval = 50;
+        _metersTimer.Tick += (_, _) => UpdateMetersTick();
 
         FormClosing += (_, _) =>
         {
@@ -154,6 +178,153 @@ public sealed class RouterMainForm : Form
 
         UpdateDiagnostics();
     }
+
+    private TabPage BuildMetersTab()
+    {
+        var page = new TabPage("Meters");
+
+        var root = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 2,
+            Padding = new Padding(12)
+        };
+        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+
+        root.Controls.Add(new Label
+        {
+            Text = "Peak meters (dBFS). Start the router to see levels.",
+            AutoSize = true
+        }, 0, 0);
+
+        var scroll = new Panel { Dock = DockStyle.Fill, AutoScroll = true };
+        var layout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Top,
+            ColumnCount = 4,
+            RowCount = 1,
+            AutoSize = true
+        };
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 160)); // name
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));  // bar
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 90));  // dB label
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 60));  // clip
+
+        var row = 0;
+        layout.Controls.Add(new Label { Text = "Signal", AutoSize = true, Font = new Font(Font, FontStyle.Bold) }, 0, row);
+        layout.Controls.Add(new Label { Text = "Level", AutoSize = true, Font = new Font(Font, FontStyle.Bold) }, 1, row);
+        layout.Controls.Add(new Label { Text = "dBFS", AutoSize = true, Font = new Font(Font, FontStyle.Bold) }, 2, row);
+        layout.Controls.Add(new Label { Text = "", AutoSize = true }, 3, row);
+        row++;
+
+        AddMeterRow(layout, ref row, "Music L", _musicMeters, _musicMeterLabels, _musicClipLabels, 0);
+        AddMeterRow(layout, ref row, "Music R", _musicMeters, _musicMeterLabels, _musicClipLabels, 1);
+        AddMeterRow(layout, ref row, "Shaker L", _shakerMeters, _shakerMeterLabels, _shakerClipLabels, 0);
+        AddMeterRow(layout, ref row, "Shaker R", _shakerMeters, _shakerMeterLabels, _shakerClipLabels, 1);
+
+        for (var ch = 0; ch < 8; ch++)
+            AddMeterRow(layout, ref row, $"Out {ShortName(ch)}", _outputMeters, _outputMeterLabels, _outputClipLabels, ch);
+
+        scroll.Controls.Add(layout);
+        root.Controls.Add(scroll, 0, 1);
+
+        page.Controls.Add(root);
+        return page;
+    }
+
+    private static void AddMeterRow(
+        TableLayoutPanel layout,
+        ref int row,
+        string name,
+        ProgressBar[] bars,
+        Label[] labels,
+        Label[] clipLabels,
+        int index)
+    {
+        var bar = new ProgressBar
+        {
+            Dock = DockStyle.Fill,
+            Minimum = 0,
+            Maximum = 1000,
+            Value = 0,
+            Style = ProgressBarStyle.Continuous
+        };
+        var label = new Label { Text = "-inf", AutoSize = true };
+        var clip = new Label { Text = "", AutoSize = true };
+
+        bars[index] = bar;
+        labels[index] = label;
+        clipLabels[index] = clip;
+
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 26));
+        layout.Controls.Add(new Label { Text = name, AutoSize = true }, 0, row);
+        layout.Controls.Add(bar, 1, row);
+        layout.Controls.Add(label, 2, row);
+        layout.Controls.Add(clip, 3, row);
+        row++;
+    }
+
+    private void UpdateMetersTick()
+    {
+        if (_router is null)
+        {
+            ClearMeters();
+            return;
+        }
+
+        _router.CopyPeakValues(_meterTmpMusic, _meterTmpShaker, _meterTmpOut);
+
+        const float release = 0.85f;
+        for (var i = 0; i < 2; i++)
+        {
+            _displayMusic[i] = Math.Max(_displayMusic[i] * release, SafeAbs(_meterTmpMusic[i]));
+            _displayShaker[i] = Math.Max(_displayShaker[i] * release, SafeAbs(_meterTmpShaker[i]));
+        }
+        for (var i = 0; i < 8; i++)
+            _displayOut[i] = Math.Max(_displayOut[i] * release, SafeAbs(_meterTmpOut[i]));
+
+        UpdateMeterUi(_musicMeters, _musicMeterLabels, _musicClipLabels, _displayMusic);
+        UpdateMeterUi(_shakerMeters, _shakerMeterLabels, _shakerClipLabels, _displayShaker);
+        UpdateMeterUi(_outputMeters, _outputMeterLabels, _outputClipLabels, _displayOut);
+    }
+
+    private void ClearMeters()
+    {
+        Array.Clear(_displayMusic);
+        Array.Clear(_displayShaker);
+        Array.Clear(_displayOut);
+
+        UpdateMeterUi(_musicMeters, _musicMeterLabels, _musicClipLabels, _displayMusic);
+        UpdateMeterUi(_shakerMeters, _shakerMeterLabels, _shakerClipLabels, _displayShaker);
+        UpdateMeterUi(_outputMeters, _outputMeterLabels, _outputClipLabels, _displayOut);
+    }
+
+    private static void UpdateMeterUi(ProgressBar[] bars, Label[] labels, Label[] clipLabels, float[] peaks)
+    {
+        for (var i = 0; i < peaks.Length; i++)
+        {
+            var p = Math.Clamp(peaks[i], 0f, 1f);
+            var v = (int)Math.Round(p * 1000);
+            v = Math.Clamp(v, bars[i].Minimum, bars[i].Maximum);
+            bars[i].Value = v;
+            labels[i].Text = FormatDbfs(p);
+            clipLabels[i].Text = p >= 0.999f ? "CLIP" : "";
+        }
+    }
+
+    private static string FormatDbfs(float peak)
+    {
+        if (peak <= 0f)
+            return "-inf";
+
+        var db = 20.0 * Math.Log10(peak);
+        if (db < -99) db = -99;
+        return $"{db:0.0}";
+    }
+
+    private static float SafeAbs(float x) => x < 0 ? -x : x;
 
     private void WireFormatUi()
     {
@@ -1495,6 +1666,8 @@ public sealed class RouterMainForm : Form
             _router = new WasapiDualRouter(_config);
             _router.Start();
 
+            _metersTimer.Enabled = true;
+
             if (!string.IsNullOrWhiteSpace(_router.FormatWarning))
             {
                 _formatWarningLabel.Text = _router.FormatWarning;
@@ -1503,6 +1676,8 @@ public sealed class RouterMainForm : Form
 
             _startButton.Enabled = false;
             _stopButton.Enabled = true;
+
+            UpdateDiagnostics();
         }
         catch (Exception ex)
         {
@@ -1524,8 +1699,14 @@ public sealed class RouterMainForm : Form
         finally
         {
             _router = null;
+
+            _metersTimer.Enabled = false;
+            ClearMeters();
+
             _startButton.Enabled = true;
             _stopButton.Enabled = false;
+
+            UpdateDiagnostics();
         }
     }
 

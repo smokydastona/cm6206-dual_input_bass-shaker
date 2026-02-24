@@ -27,6 +27,13 @@ public sealed class WasapiDualRouter : IDisposable
 
     private int _stopRequested;
 
+    private readonly object _meterLock = new();
+    private float _musicPeakL;
+    private float _musicPeakR;
+    private float _shakerPeakL;
+    private float _shakerPeakR;
+    private readonly float[] _outputPeaks = new float[8];
+
     public WasapiDualRouter(RouterConfig config)
     {
         _config = config;
@@ -76,13 +83,48 @@ public sealed class WasapiDualRouter : IDisposable
         var musicStereo = BuildStereoProvider(_musicBuffer.ToSampleProvider(), _config.SampleRate);
         var shakerStereo = BuildStereoProvider(_shakerBuffer.ToSampleProvider(), _config.SampleRate);
 
+        var samplesPerNotification = Math.Max(256, _config.SampleRate / 20); // ~20Hz updates
+
+        var meteredMusic = new MeteringSampleProvider(musicStereo, samplesPerNotification);
+        meteredMusic.StreamVolume += (_, e) =>
+        {
+            if (e.MaxSampleValues.Length < 2) return;
+            lock (_meterLock)
+            {
+                _musicPeakL = e.MaxSampleValues[0];
+                _musicPeakR = e.MaxSampleValues[1];
+            }
+        };
+
+        var meteredShaker = new MeteringSampleProvider(shakerStereo, samplesPerNotification);
+        meteredShaker.StreamVolume += (_, e) =>
+        {
+            if (e.MaxSampleValues.Length < 2) return;
+            lock (_meterLock)
+            {
+                _shakerPeakL = e.MaxSampleValues[0];
+                _shakerPeakR = e.MaxSampleValues[1];
+            }
+        };
+
         var router = new RouterSampleProvider(
-            musicStereo,
-            shakerStereo,
+            meteredMusic,
+            meteredShaker,
             outputFormat,
             _config);
 
-        var waveProvider = new SampleToWaveProvider(router);
+        var meteredOutput = new MeteringSampleProvider(router, samplesPerNotification);
+        meteredOutput.StreamVolume += (_, e) =>
+        {
+            var n = Math.Min(e.MaxSampleValues.Length, 8);
+            lock (_meterLock)
+            {
+                for (var i = 0; i < n; i++)
+                    _outputPeaks[i] = e.MaxSampleValues[i];
+            }
+        };
+
+        var waveProvider = new SampleToWaveProvider(meteredOutput);
 
         var shareMode = _config.UseExclusiveMode ? AudioClientShareMode.Exclusive : AudioClientShareMode.Shared;
         _output = new WasapiOut(_outputDevice, shareMode, true, _config.LatencyMs);
@@ -138,5 +180,22 @@ public sealed class WasapiDualRouter : IDisposable
         }
 
         return current;
+    }
+
+    public void CopyPeakValues(float[] musicStereo, float[] shakerStereo, float[] output7Point1)
+    {
+        if (musicStereo.Length < 2) throw new ArgumentException("musicStereo must have length >= 2", nameof(musicStereo));
+        if (shakerStereo.Length < 2) throw new ArgumentException("shakerStereo must have length >= 2", nameof(shakerStereo));
+        if (output7Point1.Length < 8) throw new ArgumentException("output7Point1 must have length >= 8", nameof(output7Point1));
+
+        lock (_meterLock)
+        {
+            musicStereo[0] = _musicPeakL;
+            musicStereo[1] = _musicPeakR;
+            shakerStereo[0] = _shakerPeakL;
+            shakerStereo[1] = _shakerPeakR;
+            for (var i = 0; i < 8; i++)
+                output7Point1[i] = _outputPeaks[i];
+        }
     }
 }
