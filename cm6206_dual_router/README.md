@@ -84,8 +84,10 @@ Or run the built exe:
 - `useExclusiveMode`: tries WASAPI exclusive mode (can fail if the device/format isn’t supported).
 
 ## Profiles
-- Profiles are stored at `%AppData%\Cm6206DualRouter\profiles.json`.
-- A profile is just a named snapshot of `router.json` settings (devices, mapping, gains, calibration preferences, etc.).
+- Profiles are stored as **separate JSON files** at `%AppData%\Cm6206DualRouter\profiles\*.json`.
+- A profile is a named snapshot of settings (mapping, gains, DSP, calibration preferences, etc.).
+- Each profile can optionally include `processNames` (EXE names like `game.exe`) so the app can auto-switch when it detects a matching process running.
+- In the UI: use **Import...** to copy a profile JSON into the profiles folder, or **Open folder** to manage them manually.
 
 ## Troubleshooting
 - If you hear feedback/echo: don’t route the CM6206 output back into one of the input virtual devices.

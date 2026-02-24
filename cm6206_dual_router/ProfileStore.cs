@@ -10,7 +10,17 @@ public static class ProfileStore
         PropertyNameCaseInsensitive = true
     };
 
-    private static string GetProfilesPath()
+    public static string GetProfilesDirectory()
+    {
+        var dir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+            "Cm6206DualRouter",
+            "profiles");
+        Directory.CreateDirectory(dir);
+        return dir;
+    }
+
+    private static string GetLegacyProfilesPath()
     {
         var dir = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
@@ -19,61 +29,142 @@ public static class ProfileStore
         return Path.Combine(dir, "profiles.json");
     }
 
-    public static List<RouterProfile> LoadAll()
+    private static string MakeSafeFileName(string name)
     {
-        var path = GetProfilesPath();
-        if (!File.Exists(path)) return [];
+        var invalid = Path.GetInvalidFileNameChars();
+        var safe = new string(name.Select(ch => invalid.Contains(ch) ? '_' : ch).ToArray()).Trim();
+        if (safe.Length == 0) safe = "Profile";
+        return safe;
+    }
+
+    private static string GetProfilePathForName(string name)
+    {
+        var dir = GetProfilesDirectory();
+        var file = MakeSafeFileName(name) + ".json";
+        return Path.Combine(dir, file);
+    }
+
+    private static void TryMigrateLegacyProfilesFile()
+    {
+        var legacyPath = GetLegacyProfilesPath();
+        if (!File.Exists(legacyPath)) return;
 
         try
         {
-            var json = File.ReadAllText(path);
+            var json = File.ReadAllText(legacyPath);
             var profiles = JsonSerializer.Deserialize<List<RouterProfile>>(json, JsonOptions);
-            return profiles ?? [];
+            if (profiles is null || profiles.Count == 0) return;
+
+            foreach (var p in profiles)
+            {
+                if (string.IsNullOrWhiteSpace(p.Name))
+                    continue;
+                SaveProfile(p);
+            }
+
+            // Keep a backup so nothing is lost.
+            var backup = legacyPath + ".bak";
+            if (!File.Exists(backup))
+                File.Move(legacyPath, backup);
         }
         catch
         {
-            // If the file is corrupted, don't crash the app; just start fresh.
-            return [];
+            // Ignore migration failures; old profiles still exist.
         }
     }
 
-    public static void SaveAll(List<RouterProfile> profiles)
+    public static List<RouterProfile> LoadAll()
     {
-        var path = GetProfilesPath();
-        var json = JsonSerializer.Serialize(profiles, JsonOptions);
+        TryMigrateLegacyProfilesFile();
+
+        var dir = GetProfilesDirectory();
+        var files = Directory.EnumerateFiles(dir, "*.json", SearchOption.TopDirectoryOnly)
+            .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        var results = new List<RouterProfile>();
+        foreach (var file in files)
+        {
+            try
+            {
+                var json = File.ReadAllText(file);
+                var profile = JsonSerializer.Deserialize<RouterProfile>(json, JsonOptions);
+                if (profile is null) continue;
+                profile.SourcePath = file;
+                if (string.IsNullOrWhiteSpace(profile.Name))
+                    profile.Name = Path.GetFileNameWithoutExtension(file);
+                results.Add(profile);
+            }
+            catch
+            {
+                // skip invalid profile files
+            }
+        }
+
+        results.Sort((a, b) => string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase));
+        return results;
+    }
+
+    public static void SaveProfile(RouterProfile profile)
+    {
+        if (string.IsNullOrWhiteSpace(profile.Name))
+            throw new ArgumentException("Profile name must not be empty", nameof(profile));
+
+        var path = GetProfilePathForName(profile.Name);
+        var json = JsonSerializer.Serialize(profile, JsonOptions);
         File.WriteAllText(path, json);
     }
 
-    public static void Upsert(string name, RouterConfig config)
+    public static void Upsert(string name, RouterConfig config, IEnumerable<string>? processNames)
     {
         if (string.IsNullOrWhiteSpace(name))
             throw new ArgumentException("Profile name must not be empty", nameof(name));
 
-        var profiles = LoadAll();
-        var existing = profiles.FirstOrDefault(p =>
-            string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase));
+        var pn = processNames?
+            .Select(s => (s ?? string.Empty).Trim())
+            .Where(s => s.Length > 0)
+            .Select(s => s.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ? s : (s + ".exe"))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
 
-        if (existing is null)
+        var profile = new RouterProfile
         {
-            profiles.Add(new RouterProfile { Name = name, Config = config });
-        }
-        else
-        {
-            existing.Config = config;
-        }
+            Name = name.Trim(),
+            Config = config,
+            ProcessNames = pn is { Length: > 0 } ? pn : null
+        };
 
-        profiles.Sort((a, b) => string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase));
-        SaveAll(profiles);
+        SaveProfile(profile);
     }
 
     public static bool Delete(string name)
     {
-        var profiles = LoadAll();
-        var removed = profiles.RemoveAll(p =>
-            string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase));
-        if (removed <= 0) return false;
+        var dir = GetProfilesDirectory();
+        var files = Directory.EnumerateFiles(dir, "*.json", SearchOption.TopDirectoryOnly);
+        foreach (var file in files)
+        {
+            if (string.Equals(Path.GetFileNameWithoutExtension(file), name, StringComparison.OrdinalIgnoreCase))
+            {
+                File.Delete(file);
+                return true;
+            }
 
-        SaveAll(profiles);
-        return true;
+            try
+            {
+                var json = File.ReadAllText(file);
+                var profile = JsonSerializer.Deserialize<RouterProfile>(json, JsonOptions);
+                if (profile is not null && string.Equals(profile.Name, name, StringComparison.OrdinalIgnoreCase))
+                {
+                    File.Delete(file);
+                    return true;
+                }
+            }
+            catch
+            {
+                // ignore
+            }
+        }
+
+        return false;
     }
 }

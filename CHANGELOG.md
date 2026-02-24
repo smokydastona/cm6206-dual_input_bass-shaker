@@ -8,7 +8,8 @@
 - Calibration signal generator adds a sweep mode.
 - Round-trip latency measurement (requires selecting a capture device and physically looping output to input).
 - Visual 7.1 drag-to-remap mapper (swap via drag/drop).
-- Profiles in the UI (Save As / Load / Delete) stored in `%AppData%\\Cm6206DualRouter\\profiles.json`.
+- Profiles in the UI (Save As / Load / Delete) stored as separate files in `%AppData%\\Cm6206DualRouter\\profiles\\*.json`.
+- Optional per-app auto-switching by process EXE name (profiles can declare `processNames`).
 
 ## 2026-02-24
 

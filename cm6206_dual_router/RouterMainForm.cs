@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Windows.Forms;
 using NAudio.CoreAudioApi;
+using System.Diagnostics;
 
 namespace Cm6206DualRouter;
 
@@ -12,6 +13,13 @@ public sealed class RouterMainForm : Form
     private readonly Button _profileLoadButton = new() { Text = "Load" };
     private readonly Button _profileSaveAsButton = new() { Text = "Save As" };
     private readonly Button _profileDeleteButton = new() { Text = "Delete" };
+    private readonly Button _profileImportButton = new() { Text = "Import..." };
+    private readonly Button _profileOpenFolderButton = new() { Text = "Open folder" };
+    private readonly CheckBox _profileAutoSwitch = new() { Text = "Auto-switch by running apps", AutoSize = true };
+    private readonly NumericUpDown _profilePollMs = new() { Minimum = 250, Maximum = 5000, DecimalPlaces = 0, Increment = 250, Value = 1000 };
+    private readonly System.Windows.Forms.Timer _profilePollTimer = new();
+
+    private string? _lastAutoProfileApplied;
 
     private readonly ComboBox _musicDeviceCombo = new() { DropDownStyle = ComboBoxStyle.DropDownList };
     private readonly ComboBox _shakerDeviceCombo = new() { DropDownStyle = ComboBoxStyle.DropDownList };
@@ -101,6 +109,7 @@ public sealed class RouterMainForm : Form
         Controls.Add(tabs);
 
         _autoStepTimer.Tick += (_, _) => AutoStepTick();
+        _profilePollTimer.Tick += (_, _) => AutoProfileSwitchTick();
 
         FormClosing += (_, _) =>
         {
@@ -154,6 +163,12 @@ public sealed class RouterMainForm : Form
         profileRow.Controls.Add(_profileLoadButton);
         profileRow.Controls.Add(_profileSaveAsButton);
         profileRow.Controls.Add(_profileDeleteButton);
+        profileRow.Controls.Add(_profileImportButton);
+        profileRow.Controls.Add(_profileOpenFolderButton);
+        profileRow.Controls.Add(_profileAutoSwitch);
+        profileRow.Controls.Add(new Label { Text = "Poll (ms)", AutoSize = true, Padding = new Padding(6, 6, 0, 0) });
+        _profilePollMs.Width = 80;
+        profileRow.Controls.Add(_profilePollMs);
         layout.Controls.Add(profileRow, 1, 4);
 
         var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, AutoSize = true };
@@ -172,11 +187,76 @@ public sealed class RouterMainForm : Form
         _profileLoadButton.Click += (_, _) => LoadSelectedProfileIntoUi();
         _profileSaveAsButton.Click += (_, _) => SaveCurrentAsNewProfile();
         _profileDeleteButton.Click += (_, _) => DeleteSelectedProfile();
+        _profileImportButton.Click += (_, _) => ImportProfileFile();
+        _profileOpenFolderButton.Click += (_, _) => OpenProfilesFolder();
+        _profileAutoSwitch.CheckedChanged += (_, _) => UpdateAutoProfileTimer();
+        _profilePollMs.ValueChanged += (_, _) => UpdateAutoProfileTimer();
 
         _measureLatencyButton.Click += async (_, _) => await MeasureLatencyAsync();
 
         page.Controls.Add(layout);
         return page;
+    }
+
+    private void UpdateAutoProfileTimer()
+    {
+        _profilePollTimer.Stop();
+        _profilePollTimer.Interval = (int)_profilePollMs.Value;
+
+        if (_profileAutoSwitch.Checked)
+        {
+            _lastAutoProfileApplied = null;
+            _profilePollTimer.Start();
+            AutoProfileSwitchTick();
+        }
+    }
+
+    private void AutoProfileSwitchTick()
+    {
+        if (!_profileAutoSwitch.Checked) return;
+
+        var profiles = ProfileStore.LoadAll();
+        if (profiles.Count == 0) return;
+
+        var running = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        try
+        {
+            foreach (var p in Process.GetProcesses())
+            {
+                try
+                {
+                    if (string.IsNullOrWhiteSpace(p.ProcessName)) continue;
+                    running.Add(p.ProcessName + ".exe");
+                }
+                catch
+                {
+                    // ignore processes we can't inspect
+                }
+            }
+        }
+        catch
+        {
+            return;
+        }
+
+        var match = profiles.FirstOrDefault(pr =>
+            pr.ProcessNames is { Length: > 0 } && pr.ProcessNames.Any(running.Contains));
+        if (match is null) return;
+
+        if (string.Equals(_lastAutoProfileApplied, match.Name, StringComparison.OrdinalIgnoreCase))
+            return;
+
+        _lastAutoProfileApplied = match.Name;
+
+        // Apply profile and hot-switch router if running.
+        var wasRunning = _router is not null;
+        StopTest();
+        StopRouter();
+
+        ApplyProfileConfigToUi(match);
+
+        if (wasRunning)
+            StartRouter();
     }
 
     private async Task MeasureLatencyAsync()
@@ -239,7 +319,25 @@ public sealed class RouterMainForm : Form
             string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase));
         if (profile is null) return;
 
+        ApplyProfileConfigToUi(profile);
+    }
+
+    private void ApplyProfileConfigToUi(RouterProfile profile)
+    {
+        // Apply ONLY the allowed scope (not devices).
+        // Keep existing devices + latency input capture selection.
+        var keepMusic = _config.MusicInputRenderDevice;
+        var keepShaker = _config.ShakerInputRenderDevice;
+        var keepOutput = _config.OutputRenderDevice;
+        var keepLatencyCapture = _config.LatencyInputCaptureDevice;
+
         _config = profile.Config;
+
+        _config.MusicInputRenderDevice = keepMusic;
+        _config.ShakerInputRenderDevice = keepShaker;
+        _config.OutputRenderDevice = keepOutput;
+        _config.LatencyInputCaptureDevice = keepLatencyCapture;
+
         _config.Validate();
         LoadConfigIntoControls();
         SaveConfigToDisk(showSavedDialog: false);
@@ -252,7 +350,16 @@ public sealed class RouterMainForm : Form
         var name = PromptDialog.Show("Save Profile", "Profile name:", "Default");
         if (name is null) return;
 
-        ProfileStore.Upsert(name, _config);
+        var procText = PromptDialog.Show(
+            "Save Profile",
+            "Optional: EXE names to auto-switch on (comma-separated), e.g. game.exe, vlc.exe",
+            "");
+
+        var processNames = (procText ?? string.Empty)
+            .Split([',', ';', '\n', '\r', '\t', ' '], StringSplitOptions.RemoveEmptyEntries)
+            .Select(s => s.Trim());
+
+        ProfileStore.Upsert(name, _config, processNames);
         RefreshProfilesCombo();
         _profileCombo.SelectedItem = name;
     }
@@ -272,6 +379,57 @@ public sealed class RouterMainForm : Form
 
         ProfileStore.Delete(name);
         RefreshProfilesCombo();
+    }
+
+    private void OpenProfilesFolder()
+    {
+        try
+        {
+            var dir = ProfileStore.GetProfilesDirectory();
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = dir,
+                UseShellExecute = true
+            });
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, ex.Message, "Open folder failed", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    private void ImportProfileFile()
+    {
+        try
+        {
+            using var dialog = new OpenFileDialog
+            {
+                Filter = "Profile JSON (*.json)|*.json|All files (*.*)|*.*",
+                Title = "Import profile JSON"
+            };
+
+            if (dialog.ShowDialog(this) != DialogResult.OK)
+                return;
+
+            var json = File.ReadAllText(dialog.FileName);
+            var profile = JsonSerializer.Deserialize<RouterProfile>(json, new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true,
+                ReadCommentHandling = JsonCommentHandling.Skip,
+                AllowTrailingCommas = true
+            });
+
+            if (profile is null || string.IsNullOrWhiteSpace(profile.Name))
+                throw new InvalidOperationException("Invalid profile file (missing name).");
+
+            ProfileStore.SaveProfile(profile);
+            RefreshProfilesCombo();
+            _profileCombo.SelectedItem = profile.Name;
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, ex.Message, "Import failed", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
     }
 
     private TabPage BuildDspTab()
