@@ -255,18 +255,17 @@ public sealed class RouterMainForm : Form
         AppLog.Info("RouterMainForm ctor: _assistant ok");
 
         AppLog.Info("RouterMainForm ctor: init simple mode controls...");
+        AppLog.Info("RouterMainForm ctor: simple mode combos...");
         _simpleGameSourceCombo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 520 };
         _simpleSecondarySourceCombo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 520 };
         _simpleOutputCombo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 520 };
         _simplePresetCombo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 300 };
+        AppLog.Info("RouterMainForm ctor: simple mode combos ok");
+
+        AppLog.Info("RouterMainForm ctor: simple mode labels...");
         _simplePresetSummary = new Label { AutoSize = true, ForeColor = NeonTheme.TextMuted };
-        _simpleMasterGain = new NeonSlider { Minimum = -600, Maximum = 200, Value = 0, Width = 260 };
         _simpleMasterGainLabel = new Label { Text = "0.0 dB", AutoSize = true, ForeColor = NeonTheme.TextSecondary };
-        _simpleShakerStrength = new NeonSlider { Minimum = -240, Maximum = 120, Value = -60, Width = 260 };
         _simpleShakerStrengthLabel = new Label { Text = "-6.0 dB", AutoSize = true, ForeColor = NeonTheme.TextSecondary };
-        _simpleStartButton = new Button { Text = "▶ Start Routing", Width = 260, Height = 44 };
-        _simpleStopButton = new Button { Text = "■ Stop", Width = 120, Height = 44, Enabled = false };
-        _simpleAdvancedToggle = new CheckBox { Text = "⚙ Advanced Controls", AutoSize = true };
         _simpleStatus = new Label { Text = "", AutoSize = true };
         _simpleNextHint = new Label
         {
@@ -274,8 +273,23 @@ public sealed class RouterMainForm : Form
             AutoSize = true,
             ForeColor = NeonTheme.TextMuted
         };
+        AppLog.Info("RouterMainForm ctor: simple mode labels ok");
+
+        AppLog.Info("RouterMainForm ctor: simple mode sliders...");
+        _simpleMasterGain = new NeonSlider { Minimum = -600, Maximum = 200, Value = 0, Width = 260 };
+        _simpleShakerStrength = new NeonSlider { Minimum = -240, Maximum = 120, Value = -60, Width = 260 };
+        AppLog.Info("RouterMainForm ctor: simple mode sliders ok");
+
+        AppLog.Info("RouterMainForm ctor: simple mode buttons...");
+        _simpleStartButton = new Button { Text = "▶ Start Routing", Width = 260, Height = 44 };
+        _simpleStopButton = new Button { Text = "■ Stop", Width = 120, Height = 44, Enabled = false };
+        _simpleAdvancedToggle = new CheckBox { Text = "⚙ Advanced Controls", AutoSize = true };
+        AppLog.Info("RouterMainForm ctor: simple mode buttons ok");
+
+        AppLog.Info("RouterMainForm ctor: simple mode flow/tooltip...");
         _simpleFlow = new SignalFlowControl { Dock = DockStyle.Top };
         _toolTip = new ToolTip { AutomaticDelay = 200, AutoPopDelay = 6000, ReshowDelay = 200, InitialDelay = 250, ShowAlways = true };
+        AppLog.Info("RouterMainForm ctor: simple mode flow/tooltip ok");
         AppLog.Info("RouterMainForm ctor: simple mode controls ok");
 
         AppLog.Info("RouterMainForm ctor: init remaining field controls...");
