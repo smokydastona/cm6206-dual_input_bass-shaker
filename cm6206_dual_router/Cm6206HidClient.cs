@@ -25,9 +25,11 @@ public static class Cm6206HidClient
     public static IReadOnlyList<HidDeviceInfo> EnumerateDevices()
     {
         var list = DeviceList.Local;
+#pragma warning disable CS0612 // Obsolete HIDSharp properties used for diagnostics only.
         return list.GetHidDevices(VendorId, ProductId)
             .Select(d => new HidDeviceInfo(d.DevicePath, d.Manufacturer, d.ProductName, d.SerialNumber))
             .ToList();
+#pragma warning restore CS0612
     }
 
     public static IReadOnlyDictionary<int, ushort> ReadRegisterBlock(string devicePath, int registerCount = 6)

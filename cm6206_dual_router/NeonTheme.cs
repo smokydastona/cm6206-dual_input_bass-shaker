@@ -43,7 +43,7 @@ internal static class NeonTheme
             }
         }
 
-        return SystemFonts.MessageBoxFont;
+        return SystemFonts.MessageBoxFont ?? new Font("Segoe UI", sizePx, style, GraphicsUnit.Pixel);
     }
 
     public static Font CreateMonoFont(float sizePx, FontStyle style = FontStyle.Regular)
@@ -60,6 +60,6 @@ internal static class NeonTheme
             }
         }
 
-        return SystemFonts.MessageBoxFont;
+        return SystemFonts.MessageBoxFont ?? new Font("Consolas", sizePx, style, GraphicsUnit.Pixel);
     }
 }

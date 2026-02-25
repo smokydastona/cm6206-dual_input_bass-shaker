@@ -445,7 +445,7 @@ public sealed class RouterMainForm : Form
             SecondaryPeak: secPeak,
             OutputLfePeak: outLfe,
                 OutputPeakMax: outMax,
-            HealthText: _statusHealth.Text);
+            HealthText: _statusHealth.Text ?? string.Empty);
     }
 
     private void ApplyCopilotActionsWithConfirmation(CopilotAction[] actions)

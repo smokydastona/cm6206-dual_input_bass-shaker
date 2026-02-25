@@ -39,6 +39,9 @@ public static class DeviceHelper
 
     public static MMDevice GetRenderDeviceByFriendlyName(string friendlyName)
     {
+        if (string.IsNullOrWhiteSpace(friendlyName))
+            throw new ArgumentException("friendlyName is required", nameof(friendlyName));
+
         if (string.Equals(friendlyName?.Trim(), DefaultSystemRenderDevice, StringComparison.OrdinalIgnoreCase))
         {
             using var enumeratorDefault = new MMDeviceEnumerator();
@@ -57,7 +60,7 @@ public static class DeviceHelper
             return match;
 
         // fallback: contains
-        match = devices.FirstOrDefault(d => d.FriendlyName.Contains(friendlyName, StringComparison.OrdinalIgnoreCase));
+        match = devices.FirstOrDefault(d => d.FriendlyName.Contains(friendlyName.Trim(), StringComparison.OrdinalIgnoreCase));
         if (match is not null)
             return match;
 
@@ -66,6 +69,9 @@ public static class DeviceHelper
 
     public static MMDevice GetCaptureDeviceByFriendlyName(string friendlyName)
     {
+        if (string.IsNullOrWhiteSpace(friendlyName))
+            throw new ArgumentException("friendlyName is required", nameof(friendlyName));
+
         using var enumerator = new MMDeviceEnumerator();
         var devices = enumerator.EnumerateAudioEndPoints(DataFlow.Capture, DeviceState.Active);
 
@@ -74,7 +80,7 @@ public static class DeviceHelper
             return match;
 
         // fallback: contains
-        match = devices.FirstOrDefault(d => d.FriendlyName.Contains(friendlyName, StringComparison.OrdinalIgnoreCase));
+        match = devices.FirstOrDefault(d => d.FriendlyName.Contains(friendlyName.Trim(), StringComparison.OrdinalIgnoreCase));
         if (match is not null)
             return match;
 
