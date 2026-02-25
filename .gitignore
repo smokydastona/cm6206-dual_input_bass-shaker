@@ -42,3 +42,6 @@ assets/generated/
 .vs/
 *.user
 *.suo
+
+# Locally-generated solution file (VS/VS Code may create this automatically)
+better sound.sln

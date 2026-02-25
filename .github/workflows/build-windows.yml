@@ -12,6 +12,14 @@ jobs:
   build:
     runs-on: windows-latest
 
+    env:
+      # Set to placeholders so YAML tooling understands these exist.
+      # Real values are set at runtime by the "Compute version" step via GITHUB_ENV.
+      APP_VERSION: "0.0.0"
+      ASSEMBLY_VERSION: "0.0.0.0"
+      FILE_VERSION: "0.0.0.0"
+      INFORMATIONAL_VERSION: "0.0.0+local"
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -102,9 +110,9 @@ jobs:
       - name: Sign published EXE (optional)
         shell: pwsh
         env:
-          CODESIGN_PFX_BASE64: ${{ secrets.CODESIGN_PFX_BASE64 }}
-          CODESIGN_PFX_PASSWORD: ${{ secrets.CODESIGN_PFX_PASSWORD }}
-          CODESIGN_TIMESTAMP_URL: ${{ secrets.CODESIGN_TIMESTAMP_URL }}
+          CODESIGN_PFX_BASE64: ${{ secrets['CODESIGN_PFX_BASE64'] }}
+          CODESIGN_PFX_PASSWORD: ${{ secrets['CODESIGN_PFX_PASSWORD'] }}
+          CODESIGN_TIMESTAMP_URL: ${{ secrets['CODESIGN_TIMESTAMP_URL'] }}
         run: |
           $ErrorActionPreference = 'Stop'
 

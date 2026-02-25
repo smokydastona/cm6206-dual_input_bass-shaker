@@ -204,43 +204,45 @@ internal sealed class AaaMainForm : Form
 
     private void RestartRouterFromUi()
     {
+        var view = _view;
+        var config = _config;
+        if (view is null || config is null)
+            return;
+
         try
         {
-            if (_view is null || _config is null)
-                return;
-
-            var output = _view.OutputDevice.SelectedItem as string;
-            var inputA = _view.InputA.SelectedItem as string;
-            var inputB = _view.InputB.SelectedItem as string;
+            var output = view.OutputDevice.SelectedItem as string;
+            var inputA = view.InputA.SelectedItem as string;
+            var inputB = view.InputB.SelectedItem as string;
 
             if (string.IsNullOrWhiteSpace(output) || string.IsNullOrWhiteSpace(inputA) || string.IsNullOrWhiteSpace(inputB))
             {
-                _view.DevicePill.State = PillState.Warning;
-                _view.DevicePill.Text = "Device: Not configured";
-                _view.StatusText.Text = "Status: Select Output/Input A/Input B";
+                view.DevicePill.State = PillState.Warning;
+                view.DevicePill.Text = "Device: Not configured";
+                view.StatusText.Text = "Status: Select Output/Input A/Input B";
                 StopRouter();
                 return;
             }
 
-            _config.OutputRenderDevice = output;
-            _config.MusicInputRenderDevice = inputA;
-            _config.ShakerInputRenderDevice = inputB;
-            _config.Validate(requireDevices: false);
+            config.OutputRenderDevice = output;
+            config.MusicInputRenderDevice = inputA;
+            config.ShakerInputRenderDevice = inputB;
+            config.Validate(requireDevices: false);
 
             StopRouter();
-            _router = new WasapiDualRouter(_config);
+            _router = new WasapiDualRouter(config);
             _router.Start();
 
-            _view.DevicePill.State = PillState.Ok;
-            _view.DevicePill.Text = "Device: Connected";
-            _view.StatusText.Text = "Status: Running";
+            view.DevicePill.State = PillState.Ok;
+            view.DevicePill.Text = "Device: Connected";
+            view.StatusText.Text = "Status: Running";
         }
         catch (Exception ex)
         {
             AppLog.Warn($"AAA UI failed to start router: {ex.Message}");
-            _view.DevicePill.State = PillState.Error;
-            _view.DevicePill.Text = "Device: Error";
-            _view.StatusText.Text = $"Status: {ex.Message}";
+            view.DevicePill.State = PillState.Error;
+            view.DevicePill.Text = "Device: Error";
+            view.StatusText.Text = $"Status: {ex.Message}";
             StopRouter();
         }
     }
@@ -265,7 +267,11 @@ internal sealed class AaaMainForm : Form
     private void ApplyPreset(string preset)
     {
         // UI spec defines the preset list + interaction; exact DSP value wiring will be added next.
-        _view.StatusText.Text = $"Status: Preset applied: {preset}";
+        var view = _view;
+        if (view is null)
+            return;
+
+        view.StatusText.Text = $"Status: Preset applied: {preset}";
     }
 
     private static void SelectIfPresent(ComboBox combo, string value)
