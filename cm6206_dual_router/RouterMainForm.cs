@@ -264,6 +264,8 @@ public sealed class RouterMainForm : Form
     public RouterMainForm(string configPath)
     {
 
+        AppLog.Info("RouterMainForm ctor: begin");
+
         _aiCopilot = new AiCopilotService(new OpenAiClient(new HttpClient()));
         _configPath = configPath;
         Text = "CM6206 Dual Router";
@@ -280,6 +282,8 @@ public sealed class RouterMainForm : Form
         _aiSettings = AiSettingsStore.Load();
 
         _config = LoadOrCreateConfigForUi(_configPath);
+
+        AppLog.Info("RouterMainForm ctor: config loaded");
 
         _tabs.DrawMode = TabDrawMode.OwnerDrawFixed;
         _tabs.Padding = new Point(14, 6);
@@ -313,6 +317,8 @@ public sealed class RouterMainForm : Form
         _metersPage = BuildMetersTab();
         _calibrationPage = BuildCalibrationTab();
 
+        AppLog.Info("RouterMainForm ctor: tabs built");
+
         RebuildTabs(showAdvanced: _uiState.ShowAdvancedControls);
         _mainSplit.Panel1.Controls.Add(_tabs);
         _mainSplit.Panel2.Controls.Add(_assistant);
@@ -326,6 +332,8 @@ public sealed class RouterMainForm : Form
         Controls.Add(_statusStrip);
 
         ApplyNeonTheme(this);
+
+        AppLog.Info("RouterMainForm ctor: theme applied");
 
         _assistant.LoadSettings(_aiSettings);
         _assistant.GetContext = BuildCopilotContext;
@@ -362,7 +370,13 @@ public sealed class RouterMainForm : Form
         UpdateDiagnostics();
         UpdateStatusBar();
 
-        Shown += async (_, _) => await StartupAfterShownAsync();
+        Shown += async (_, _) =>
+        {
+            AppLog.Info("RouterMainForm: Shown event");
+            await StartupAfterShownAsync();
+        };
+
+        AppLog.Info("RouterMainForm ctor: end");
     }
 
     private async Task StartupAfterShownAsync()

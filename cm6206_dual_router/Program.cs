@@ -10,6 +10,15 @@ internal static class Program
     {
         AppLog.Initialize();
 
+        try
+        {
+            AppLog.Info($"Args(original)={string.Join(" ", args.Select(a => a.Contains(' ') ? $"\"{a}\"" : a))}");
+        }
+        catch
+        {
+            // ignore
+        }
+
         Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
         Application.ThreadException += (_, e) =>
         {
@@ -35,6 +44,15 @@ internal static class Program
         if (args.Length == 0)
             args = ["--ui"];
 
+        try
+        {
+            AppLog.Info($"Args(effective)={string.Join(" ", args.Select(a => a.Contains(' ') ? $"\"{a}\"" : a))}");
+        }
+        catch
+        {
+            // ignore
+        }
+
         var configOption = new Option<string>(
             name: "--config",
             description: "Path to router.json",
@@ -55,6 +73,7 @@ internal static class Program
 
         root.SetHandler((configPath, listDevices, ui) =>
         {
+            AppLog.Info($"Command handler invoked: ui={ui}, listDevices={listDevices}, configPath={configPath}");
             if (listDevices)
             {
                 DeviceHelper.PrintRenderDevices();
@@ -65,8 +84,11 @@ internal static class Program
 
             if (ui)
             {
+                AppLog.Info("Launching WinForms UI...");
                 ApplicationConfiguration.Initialize();
+                AppLog.Info("Entering Application.Run...");
                 Application.Run(new RouterMainForm(configPath));
+                AppLog.Info("Application.Run returned; exiting UI mode.");
                 return;
             }
 
