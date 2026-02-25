@@ -56,6 +56,15 @@ Self-signed quickstart (dev/testing):
 	- `pwsh scripts/pfx-to-base64.ps1 -PfxPath .\codesign_dev\codesign_SmokyDaStona_dev.pfx`
 	- Paste the output into `CODESIGN_PFX_BASE64`
 
+### Releases ("tag and push")
+This repo uses **two** GitHub Actions workflows:
+- **Push builds**: build/upload artifacts for `main` and PRs.
+- **Tag releases**: when you push a tag like `v1.2.3`, it builds and creates a GitHub **Release** with a versioned ZIP asset. The app's in-app update checker uses GitHub "latest release".
+
+Create a release:
+- `git tag v1.2.3`
+- `git push origin v1.2.3`
+
 To sign locally (requires Windows SDK SignTool):
 - `pwsh scripts/sign.ps1 -File .\Cm6206DualRouter.exe -PfxPath .\yourcert.pfx -PfxPassword '...'
 
