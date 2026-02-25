@@ -41,6 +41,53 @@ jobs:
           /p:DebugSymbols=false
           -o "artifacts/cm6206_dual_router_win-x64"
 
+      - name: Sign published EXE (optional)
+        if: ${{ secrets.CODESIGN_PFX_BASE64 != '' && secrets.CODESIGN_PFX_PASSWORD != '' }}
+        shell: pwsh
+        env:
+          CODESIGN_PFX_BASE64: ${{ secrets.CODESIGN_PFX_BASE64 }}
+          CODESIGN_PFX_PASSWORD: ${{ secrets.CODESIGN_PFX_PASSWORD }}
+          CODESIGN_TIMESTAMP_URL: ${{ secrets.CODESIGN_TIMESTAMP_URL }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $artifactDir = Join-Path $PWD 'artifacts/cm6206_dual_router_win-x64'
+          $exe = Join-Path $artifactDir 'Cm6206DualRouter.exe'
+          if (-not (Test-Path -LiteralPath $exe)) {
+            throw "Expected publish output not found: $exe"
+          }
+
+          $pfxPath = Join-Path $env:RUNNER_TEMP 'codesign.pfx'
+          [IO.File]::WriteAllBytes($pfxPath, [Convert]::FromBase64String($env:CODESIGN_PFX_BASE64))
+
+          $timestamp = $env:CODESIGN_TIMESTAMP_URL
+          if ([string]::IsNullOrWhiteSpace($timestamp)) { $timestamp = 'http://timestamp.digicert.com' }
+
+          function Find-SignTool {
+            $cmd = Get-Command signtool.exe -ErrorAction SilentlyContinue
+            if ($cmd) { return $cmd.Source }
+
+            $roots = @(
+              'C:\Program Files (x86)\Windows Kits\10\bin',
+              'C:\Program Files\Windows Kits\10\bin'
+            )
+
+            foreach ($root in $roots) {
+              if (-not (Test-Path -LiteralPath $root)) { continue }
+              $found = Get-ChildItem -LiteralPath $root -Recurse -Filter signtool.exe -ErrorAction SilentlyContinue |
+                Sort-Object FullName -Descending |
+                Select-Object -First 1
+              if ($found) { return $found.FullName }
+            }
+
+            throw 'signtool.exe not found on runner.'
+          }
+
+          $signtool = Find-SignTool
+          Write-Host "Using signtool: $signtool"
+
+          & $signtool sign /fd sha256 /a /f $pfxPath /p $env:CODESIGN_PFX_PASSWORD /tr $timestamp /td sha256 $exe
+          & $signtool verify /pa /v $exe
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:

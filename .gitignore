@@ -11,6 +11,10 @@ cm6206_extracted/
 *.msi
 *.zip
 
+# Code signing secrets
+*.pfx
+*.snk
+
 # Driver binaries
 *.sys
 *.cat

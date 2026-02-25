@@ -37,6 +37,17 @@ Common setup:
 - This repo publishes a self-contained `win-x64` single-file build.
 - On GitHub: **Actions** → latest **build-windows** → download artifact `cm6206_dual_router_win-x64`.
 
+### Code signing / “Publisher”
+Windows shows a real **Publisher** in UAC/SmartScreen only when the EXE is **code-signed**.
+
+This repo supports optional signing in GitHub Actions if you add these repository secrets:
+- `CODESIGN_PFX_BASE64`: base64-encoded `.pfx`
+- `CODESIGN_PFX_PASSWORD`: password for the `.pfx`
+- (optional) `CODESIGN_TIMESTAMP_URL`: default `http://timestamp.digicert.com`
+
+To sign locally (requires Windows SDK SignTool):
+- `pwsh scripts/sign.ps1 -File .\Cm6206DualRouter.exe -PfxPath .\yourcert.pfx -PfxPassword '...'
+
 ## Local build (optional)
 - Install **.NET 8 SDK (x64)**: https://dotnet.microsoft.com/download/dotnet/8.0
 
