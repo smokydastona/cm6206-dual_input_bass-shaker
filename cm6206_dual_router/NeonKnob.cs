@@ -55,7 +55,12 @@ internal sealed class NeonKnob : Control
     public NeonKnob()
     {
         DoubleBuffered = true;
-        SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint | ControlStyles.OptimizedDoubleBuffer, true);
+        SetStyle(
+            ControlStyles.AllPaintingInWmPaint |
+            ControlStyles.UserPaint |
+            ControlStyles.OptimizedDoubleBuffer |
+            ControlStyles.SupportsTransparentBackColor,
+            true);
 
         Width = 64;
         Height = 64;

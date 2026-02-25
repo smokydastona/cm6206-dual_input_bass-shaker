@@ -9,6 +9,7 @@ internal sealed class NeonPanel : Panel
     public NeonPanel()
     {
         DoubleBuffered = true;
+        SetStyle(ControlStyles.SupportsTransparentBackColor, true);
         BackColor = Color.Transparent;
         Padding = new Padding(12);
     }

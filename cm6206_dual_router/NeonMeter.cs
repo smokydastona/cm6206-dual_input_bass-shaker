@@ -12,7 +12,12 @@ internal sealed class NeonMeter : Control
     public NeonMeter()
     {
         DoubleBuffered = true;
-        SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint | ControlStyles.OptimizedDoubleBuffer, true);
+        SetStyle(
+            ControlStyles.AllPaintingInWmPaint |
+            ControlStyles.UserPaint |
+            ControlStyles.OptimizedDoubleBuffer |
+            ControlStyles.SupportsTransparentBackColor,
+            true);
 
         BackColor = Color.Transparent;
         Width = 18;

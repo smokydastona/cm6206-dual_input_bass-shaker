@@ -17,7 +17,12 @@ internal sealed class NeonSlider : Control
     public NeonSlider()
     {
         DoubleBuffered = true;
-        SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint | ControlStyles.OptimizedDoubleBuffer, true);
+        SetStyle(
+            ControlStyles.AllPaintingInWmPaint |
+            ControlStyles.UserPaint |
+            ControlStyles.OptimizedDoubleBuffer |
+            ControlStyles.SupportsTransparentBackColor,
+            true);
 
         Height = 22;
         MinimumSize = new Size(120, 22);

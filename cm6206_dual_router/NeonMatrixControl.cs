@@ -23,7 +23,12 @@ internal sealed class NeonMatrixControl : Control
         _cells = new bool[rows, cols];
 
         DoubleBuffered = true;
-        SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint | ControlStyles.OptimizedDoubleBuffer, true);
+        SetStyle(
+            ControlStyles.AllPaintingInWmPaint |
+            ControlStyles.UserPaint |
+            ControlStyles.OptimizedDoubleBuffer |
+            ControlStyles.SupportsTransparentBackColor,
+            true);
 
         // Use the inherited/system font; avoid custom font creation during startup.
         BackColor = Color.Transparent;
