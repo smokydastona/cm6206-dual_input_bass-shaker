@@ -9,6 +9,18 @@ internal static class Program
 {
     public static async Task<int> Main(string[] args)
     {
+        AppLog.Initialize();
+
+        AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+        {
+            if (e.ExceptionObject is Exception ex)
+                AppLog.Crash(ex, "AppDomain.CurrentDomain.UnhandledException");
+        };
+        TaskScheduler.UnobservedTaskException += (_, e) =>
+        {
+            AppLog.Crash(e.Exception, "TaskScheduler.UnobservedTaskException");
+        };
+
         var configOption = new Option<string>(
             name: "--config",
             description: "Path to engine config JSON",
@@ -66,6 +78,18 @@ internal static class Program
         },
         configOption, listDevicesOption, telemetryWsOverride, calibrateBusOption);
 
-        return await root.InvokeAsync(args);
+        try
+        {
+            return await root.InvokeAsync(args);
+        }
+        catch (Exception ex)
+        {
+            var path = AppLog.Crash(ex, "Program.Main");
+            if (!string.IsNullOrWhiteSpace(path))
+                Console.Error.WriteLine($"Fatal error. Crash log written: {path}");
+            else
+                Console.Error.WriteLine("Fatal error. (Failed to write crash log.)");
+            return 1;
+        }
     }
 }
