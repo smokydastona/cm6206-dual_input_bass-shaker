@@ -28,6 +28,9 @@ codesign_dev/
 **/bin/
 **/obj/
 
+# Generated asset exports
+assets/generated/
+
 # Visual Studio / VS Code
 .vs/
 *.user
