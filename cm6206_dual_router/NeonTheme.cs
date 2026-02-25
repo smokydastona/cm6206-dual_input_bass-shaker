@@ -1,4 +1,5 @@
 using System.Drawing;
+using System.Diagnostics;
 
 namespace Cm6206DualRouter;
 
@@ -30,11 +31,16 @@ internal static class NeonTheme
 
     public static Font CreateBaseFont(float sizePx, FontStyle style = FontStyle.Regular)
     {
-        // Try Inter / JetBrains Sans, fall back to Segoe UI.
-        foreach (var family in new[] { "Inter", "JetBrains Sans", "Segoe UI" })
+        // Prefer standard Windows fonts first for maximum reliability.
+        // Custom fonts (Inter/JetBrains) are optional and occasionally problematic on some systems.
+        var sw = Stopwatch.StartNew();
+        SafeInfo($"NeonTheme.CreateBaseFont start sizePx={sizePx} style={style}");
+
+        foreach (var family in new[] { "Segoe UI", "Inter", "JetBrains Sans" })
         {
             try
             {
+                SafeInfo($"NeonTheme.CreateBaseFont trying family='{family}'");
                 return new Font(family, sizePx, style, GraphicsUnit.Pixel);
             }
             catch
@@ -43,15 +49,30 @@ internal static class NeonTheme
             }
         }
 
-        return SystemFonts.MessageBoxFont ?? new Font("Segoe UI", sizePx, style, GraphicsUnit.Pixel);
+        try
+        {
+            var fallback = SystemFonts.MessageBoxFont ?? new Font("Segoe UI", sizePx, style, GraphicsUnit.Pixel);
+            SafeInfo($"NeonTheme.CreateBaseFont fallback in {sw.ElapsedMilliseconds}ms");
+            return fallback;
+        }
+        catch
+        {
+            // absolute last resort
+            return new Font(FontFamily.GenericSansSerif, sizePx, style, GraphicsUnit.Pixel);
+        }
     }
 
     public static Font CreateMonoFont(float sizePx, FontStyle style = FontStyle.Regular)
     {
-        foreach (var family in new[] { "JetBrains Mono", "Cascadia Mono", "Consolas" })
+        var sw = Stopwatch.StartNew();
+        SafeInfo($"NeonTheme.CreateMonoFont start sizePx={sizePx} style={style}");
+
+        // Prefer standard monospace fonts first.
+        foreach (var family in new[] { "Consolas", "Cascadia Mono", "JetBrains Mono" })
         {
             try
             {
+                SafeInfo($"NeonTheme.CreateMonoFont trying family='{family}'");
                 return new Font(family, sizePx, style, GraphicsUnit.Pixel);
             }
             catch
@@ -60,6 +81,27 @@ internal static class NeonTheme
             }
         }
 
-        return SystemFonts.MessageBoxFont ?? new Font("Consolas", sizePx, style, GraphicsUnit.Pixel);
+        try
+        {
+            var fallback = SystemFonts.MessageBoxFont ?? new Font("Consolas", sizePx, style, GraphicsUnit.Pixel);
+            SafeInfo($"NeonTheme.CreateMonoFont fallback in {sw.ElapsedMilliseconds}ms");
+            return fallback;
+        }
+        catch
+        {
+            return new Font(FontFamily.GenericMonospace, sizePx, style, GraphicsUnit.Pixel);
+        }
+    }
+
+    private static void SafeInfo(string message)
+    {
+        try
+        {
+            AppLog.Info(message);
+        }
+        catch
+        {
+            // ignore
+        }
     }
 }
