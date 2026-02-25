@@ -187,9 +187,20 @@ public sealed class RouterMainForm : Form
     private readonly ToolStripStatusLabel _statusSpacer2 = new() { Spring = true };
     private readonly ToolStripStatusLabel _statusLatency = new() { Text = "Latency: (unknown)" };
 
+    private readonly ToolStripStatusLabel _statusUpdate = new()
+    {
+        Text = "↑",
+        Visible = false,
+        AutoSize = true,
+        ForeColor = NeonTheme.MeterLow,
+        ToolTipText = "Update available"
+    };
+
     private readonly System.Windows.Forms.Timer _statusTimer = new();
 
     private readonly ToolStripDropDownButton _statusPreset = new() { Text = "Preset" };
+
+    private UpdateInfo? _availableUpdate;
 
     // SÖNDBÖUND console (Routing tab)
     private readonly NeonMatrixControl _consoleMatrix = new(rows: 6, cols: 2);
@@ -328,7 +339,13 @@ public sealed class RouterMainForm : Form
 
         _statusStrip.BackColor = NeonTheme.BgPanel;
         _statusStrip.ForeColor = NeonTheme.TextSecondary;
-        _statusStrip.Items.AddRange(new ToolStripItem[] { _statusHealth, _statusRouter, _statusSpacer1, _statusFormat, _statusSpacer2, _statusLatency, _statusPreset });
+        _statusUpdate.BorderSides = ToolStripStatusLabelBorderSides.All;
+        _statusUpdate.BorderStyle = Border3DStyle.Etched;
+        _statusUpdate.Margin = new Padding(4, 2, 4, 2);
+        _statusUpdate.Padding = new Padding(8, 0, 8, 0);
+        _statusUpdate.Click += async (_, _) => await OnUpdateClickedAsync();
+
+        _statusStrip.Items.AddRange(new ToolStripItem[] { _statusHealth, _statusRouter, _statusSpacer1, _statusFormat, _statusSpacer2, _statusLatency, _statusUpdate, _statusPreset });
         Controls.Add(_statusStrip);
 
         ApplyNeonTheme(this);
@@ -388,6 +405,8 @@ public sealed class RouterMainForm : Form
             LoadDeviceSelectionsFromConfig();
             UpdateStatusBar();
             UpdateFormatInfo();
+
+            _ = CheckForUpdatesAfterStartupAsync();
         }
         catch (Exception ex)
         {
@@ -395,6 +414,74 @@ public sealed class RouterMainForm : Form
             AppLog.Error("StartupAfterShownAsync failed", ex);
             UpdateStatusBar();
         }
+    }
+
+    private async Task CheckForUpdatesAfterStartupAsync()
+    {
+        try
+        {
+            // "A little after start": avoid racing UI creation and keep startup snappy.
+            await Task.Delay(2500);
+            if (IsDisposed)
+                return;
+
+            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+            var latest = await UpdateChecker.TryGetLatestUpdateAsync(http, CancellationToken.None);
+            if (latest is null)
+                return;
+
+            var current = UpdateChecker.GetCurrentVersion();
+            if (!UpdateChecker.IsUpdateAvailable(current, latest.LatestVersion))
+                return;
+
+            _availableUpdate = latest;
+            AppLog.Info($"Update available: current={current}, latest={latest.LatestVersion} ({latest.TagName})");
+
+            if (IsDisposed)
+                return;
+
+            BeginInvoke(new Action(() =>
+            {
+                _statusUpdate.Visible = true;
+                _statusUpdate.ToolTipText = $"Update available: {latest.TagName}";
+            }));
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn($"Update check failed: {ex.Message}");
+        }
+    }
+
+    private async Task OnUpdateClickedAsync()
+    {
+        var info = _availableUpdate;
+        if (info is null)
+            return;
+
+        var current = UpdateChecker.GetCurrentVersion();
+        var msg = info.AssetDownloadUrl is null
+            ? $"A newer version is available.\n\nCurrent: {current}\nLatest: {info.TagName}\n\nOpen the release page?"
+            : $"A newer version is available.\n\nCurrent: {current}\nLatest: {info.TagName}\n\nUpdate now?";
+
+        var result = MessageBox.Show(this, msg, "Update available", MessageBoxButtons.OKCancel, MessageBoxIcon.Information);
+        if (result != DialogResult.OK)
+            return;
+
+        // If we can auto-update (zip/exe asset present), do it; otherwise just open the release page.
+        if (info.AssetDownloadUrl is null)
+        {
+            try
+            {
+                Process.Start(new ProcessStartInfo { FileName = info.HtmlUrl.ToString(), UseShellExecute = true });
+            }
+            catch
+            {
+                // ignore
+            }
+            return;
+        }
+
+        await AppUpdater.TryUpdateToLatestAsync(info, this, CancellationToken.None);
     }
 
     private async Task<CopilotResponse> ExplainCurrentScreenAsync()
