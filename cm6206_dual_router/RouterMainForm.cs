@@ -12,14 +12,9 @@ public sealed class RouterMainForm : Form
 {
     private readonly string _configPath;
 
-    private readonly SplitContainer _mainSplit = new()
-    {
-        Dock = DockStyle.Fill,
-        FixedPanel = FixedPanel.Panel2,
-        SplitterWidth = 6
-    };
+    private readonly SplitContainer _mainSplit;
 
-    private readonly SetupAssistantPanel _assistant = new();
+    private readonly SetupAssistantPanel _assistant;
 
     private AiSettings _aiSettings;
 
@@ -34,7 +29,7 @@ public sealed class RouterMainForm : Form
     private bool _suppressFormatUpdate;
     private int _formatInfoRequestId;
 
-    private readonly TabControl _tabs = new() { Dock = DockStyle.Fill };
+    private readonly TabControl _tabs;
     private TabPage? _simplePage;
     private TabPage? _devicesPage;
     private TabPage? _diagnosticsPage;
@@ -274,8 +269,22 @@ public sealed class RouterMainForm : Form
 
     public RouterMainForm(string configPath)
     {
-
         AppLog.Info("RouterMainForm ctor: begin");
+
+        AppLog.Info("RouterMainForm ctor: init core controls...");
+        _mainSplit = new SplitContainer
+        {
+            Dock = DockStyle.Fill,
+            FixedPanel = FixedPanel.Panel2,
+            SplitterWidth = 6
+        };
+        AppLog.Info("RouterMainForm ctor: _mainSplit ok");
+
+        _tabs = new TabControl { Dock = DockStyle.Fill };
+        AppLog.Info("RouterMainForm ctor: _tabs ok");
+
+        _assistant = new SetupAssistantPanel();
+        AppLog.Info("RouterMainForm ctor: _assistant ok");
 
         _aiCopilot = new AiCopilotService(new OpenAiClient(new HttpClient()));
         _configPath = configPath;
