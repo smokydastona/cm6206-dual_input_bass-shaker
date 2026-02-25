@@ -42,13 +42,43 @@ Source: "{#PublishDir}\\*"; DestDir: "{app}"; Flags: recursesubdirs createallsub
 Source: "..\\cm6206_extracted\\[CMedia CM6206] Windows USB 7.1 Audio Adapter\\WIN10\\SoftwareDriver\\Driver\\*"; DestDir: "{tmp}\\cm6206_driver"; Flags: recursesubdirs createallsubdirs deleteafterinstall; Tasks: install_driver
 
 [Run]
-; Install the driver using pnputil.
-; Note: pnputil returns non-zero for various cases (already installed, etc.). We keep it best-effort.
-Filename: "{sys}\\pnputil.exe"; Parameters: "/add-driver ""{tmp}\\cm6206_driver\\CMUAC.inf"" /install"; Flags: runhidden waituntilterminated ignoreerrors; Tasks: install_driver
-
 ; Launch the app after install
 Filename: "{app}\\Cm6206DualRouter.exe"; Description: "Launch {#MyAppName}"; Flags: nowait postinstall skipifsilent
 
 [Icons]
 Name: "{group}\\{#MyAppName}"; Filename: "{app}\\Cm6206DualRouter.exe"
 Name: "{userdesktop}\\{#MyAppName}"; Filename: "{app}\\Cm6206DualRouter.exe"; Tasks: desktop_icon
+
+[Code]
+procedure TryInstallDriverWithPnPUtil();
+var
+  InfPath: string;
+  ResultCode: Integer;
+  Ok: Boolean;
+begin
+  if not WizardIsTaskSelected('install_driver') then
+    exit;
+
+  InfPath := ExpandConstant('{tmp}\\cm6206_driver\\CMUAC.inf');
+  if not FileExists(InfPath) then
+  begin
+    Log('CM6206 driver INF not found: ' + InfPath);
+    exit;
+  end;
+
+  Log('Installing CM6206 driver via pnputil: ' + InfPath);
+  Ok := Exec(ExpandConstant('{sys}\\pnputil.exe'),
+    '/add-driver "' + InfPath + '" /install',
+    '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+
+  if Ok then
+    Log(Format('pnputil exit code: %d (ignored)', [ResultCode]))
+  else
+    Log('pnputil failed to start (ignored)');
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+begin
+  if CurStep = ssPostInstall then
+    TryInstallDriverWithPnPUtil();
+end;
