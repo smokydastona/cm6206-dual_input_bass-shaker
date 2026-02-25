@@ -12,9 +12,12 @@ namespace Cm6206DualRouter;
 internal sealed class AaaMainForm : Form
 {
     private readonly string _configPath;
-    private readonly AaaMainView _view;
+    private AaaMainView? _view;
 
-    private RouterConfig _config;
+    private readonly Panel _splash;
+    private readonly Label _splashText;
+
+    private RouterConfig? _config;
     private WasapiDualRouter? _router;
 
     public AaaMainForm(string configPath)
@@ -22,7 +25,8 @@ internal sealed class AaaMainForm : Form
         AppLog.Info("AaaMainForm ctor: begin");
 
         _configPath = configPath;
-        _config = RouterConfig.Load(_configPath);
+        _config = null;
+        AppLog.Info("AaaMainForm ctor: config deferred to Shown");
 
         Text = "CM6206 Dual-Input Bass Shaker";
         StartPosition = FormStartPosition.CenterScreen;
@@ -35,24 +39,21 @@ internal sealed class AaaMainForm : Form
         var h = Math.Min(AaaUiMetrics.BaseHeight, wa.Height);
         ClientSize = new Size(w, h);
 
-        _view = new AaaMainView();
-        Controls.Add(_view);
-
-        _view.BuildInfo.Text = $"Build: {typeof(Program).Assembly.GetName().Version}";
-
-        _view.OpenLogFolder.Click += (_, _) => OpenLogFolder();
-
-        _view.OutputDevice.SelectionChangeCommitted += (_, _) => RestartRouterFromUi();
-        _view.InputA.SelectionChangeCommitted += (_, _) => RestartRouterFromUi();
-        _view.InputB.SelectionChangeCommitted += (_, _) => RestartRouterFromUi();
-
-        _view.PresetGaming.Click += (_, _) => ApplyPreset("Gaming");
-        _view.PresetMovies.Click += (_, _) => ApplyPreset("Movies");
-        _view.PresetMusic.Click += (_, _) => ApplyPreset("Music");
-        _view.PresetCustom.Click += (_, _) => ApplyPreset("Custom");
+        // Lightweight placeholder that should never hang.
+        _splashText = new Label
+        {
+            Dock = DockStyle.Fill,
+            TextAlign = ContentAlignment.MiddleCenter,
+            ForeColor = NeonTheme.TextPrimary,
+            BackColor = NeonTheme.BgPrimary,
+            Text = "Starting UI..."
+        };
+        _splash = new Panel { Dock = DockStyle.Fill, BackColor = NeonTheme.BgPrimary };
+        _splash.Controls.Add(_splashText);
+        Controls.Add(_splash);
 
         Shown += async (_, _) => await OnShownAsync();
-        Resize += (_, _) => _view.ApplyScaledLayout();
+        Resize += (_, _) => _view?.ApplyScaledLayout();
 
         FormClosing += (_, _) =>
         {
@@ -60,9 +61,7 @@ internal sealed class AaaMainForm : Form
         };
 
         // Immediate startup state.
-        _view.DevicePill.State = PillState.Unknown;
-        _view.DevicePill.Text = "Device: (detecting)";
-        _view.StatusText.Text = "Status: Starting...";
+        _splashText.Text = "Status: Starting...";
 
         AppLog.Info("AaaMainForm ctor: end");
     }
@@ -71,7 +70,30 @@ internal sealed class AaaMainForm : Form
     {
         try
         {
-            // Enumerate devices off the UI thread; keep UI responsive.
+            AppLog.Info("AAA UI OnShownAsync: begin");
+
+            _splashText.Text = "Status: Building UI...";
+            await EnsureViewAsync().ConfigureAwait(true);
+
+            _view!.BuildInfo.Text = $"Build: {typeof(Program).Assembly.GetName().Version}";
+            _view.OpenLogFolder.Click += (_, _) => OpenLogFolder();
+            _view.OutputDevice.SelectionChangeCommitted += (_, _) => RestartRouterFromUi();
+            _view.InputA.SelectionChangeCommitted += (_, _) => RestartRouterFromUi();
+            _view.InputB.SelectionChangeCommitted += (_, _) => RestartRouterFromUi();
+            _view.PresetGaming.Click += (_, _) => ApplyPreset("Gaming");
+            _view.PresetMovies.Click += (_, _) => ApplyPreset("Movies");
+            _view.PresetMusic.Click += (_, _) => ApplyPreset("Music");
+            _view.PresetCustom.Click += (_, _) => ApplyPreset("Custom");
+
+            _view.DevicePill.State = PillState.Unknown;
+            _view.DevicePill.Text = "Device: (detecting)";
+            _view.StatusText.Text = "Status: Loading config...";
+
+            // Load config off the UI thread with a timeout so UI always appears.
+            _config = await LoadConfigAsync(_configPath, TimeSpan.FromSeconds(3)).ConfigureAwait(true);
+            AppLog.Info("AAA UI OnShownAsync: config loaded");
+
+            _view.StatusText.Text = "Status: Enumerating audio devices...";
             await RefreshDevicesAsync().ConfigureAwait(true);
 
             // Best-effort: pick config values if present.
@@ -80,19 +102,69 @@ internal sealed class AaaMainForm : Form
             SelectIfPresent(_view.InputB, _config.ShakerInputRenderDevice);
 
             RestartRouterFromUi();
+            AppLog.Info("AAA UI OnShownAsync: end");
         }
         catch (Exception ex)
         {
             AppLog.Error("AAA UI OnShownAsync failed", ex);
+
+            if (_view is null)
+            {
+                _splashText.Text = $"Status: {ex.Message}";
+                return;
+            }
+
             _view.DevicePill.State = PillState.Error;
             _view.DevicePill.Text = "Device: Error";
             _view.StatusText.Text = $"Status: {ex.Message}";
         }
     }
 
+    private Task EnsureViewAsync()
+    {
+        if (_view is not null) return Task.CompletedTask;
+
+        return Task.Run(() =>
+        {
+            // Create view on UI thread; using BeginInvoke avoids any constructor-time reentrancy issues.
+            var tcs = new TaskCompletionSource();
+            BeginInvoke(new Action(() =>
+            {
+                try
+                {
+                    AppLog.Info("AAA UI: creating AaaMainView...");
+                    var view = new AaaMainView();
+                    Controls.Remove(_splash);
+                    _splash.Dispose();
+                    _view = view;
+                    Controls.Add(view);
+                    view.BringToFront();
+                    view.ApplyScaledLayout();
+                    AppLog.Info("AAA UI: AaaMainView created and attached");
+                    tcs.SetResult();
+                }
+                catch (Exception ex)
+                {
+                    tcs.SetException(ex);
+                }
+            }));
+            tcs.Task.GetAwaiter().GetResult();
+        });
+    }
+
+    private static async Task<RouterConfig> LoadConfigAsync(string path, TimeSpan timeout)
+    {
+        var task = Task.Run(() => RouterConfig.Load(path, validate: false));
+        var completed = await Task.WhenAny(task, Task.Delay(timeout)).ConfigureAwait(false);
+        if (completed != task)
+            throw new TimeoutException($"Timed out loading config: {path}");
+        return await task.ConfigureAwait(false);
+    }
+
     private async Task RefreshDevicesAsync()
     {
-        _view.StatusText.Text = "Status: Enumerating audio devices...";
+        if (_view is not null)
+            _view.StatusText.Text = "Status: Enumerating audio devices...";
 
         var task = Task.Run(() =>
         {
@@ -116,21 +188,27 @@ internal sealed class AaaMainForm : Form
 
         var renderNames = await task.ConfigureAwait(true);
 
-        _view.OutputDevice.Items.Clear();
-        _view.InputA.Items.Clear();
-        _view.InputB.Items.Clear();
+        if (_view is not null)
+        {
+            _view.OutputDevice.Items.Clear();
+            _view.InputA.Items.Clear();
+            _view.InputB.Items.Clear();
 
-        _view.OutputDevice.Items.AddRange(renderNames);
-        _view.InputA.Items.AddRange(renderNames);
-        _view.InputB.Items.AddRange(renderNames);
+            _view.OutputDevice.Items.AddRange(renderNames);
+            _view.InputA.Items.AddRange(renderNames);
+            _view.InputB.Items.AddRange(renderNames);
 
-        _view.StatusText.Text = "Status: Devices loaded.";
+            _view.StatusText.Text = "Status: Devices loaded.";
+        }
     }
 
     private void RestartRouterFromUi()
     {
         try
         {
+            if (_view is null || _config is null)
+                return;
+
             var output = _view.OutputDevice.SelectedItem as string;
             var inputA = _view.InputA.SelectedItem as string;
             var inputB = _view.InputB.SelectedItem as string;
@@ -147,7 +225,7 @@ internal sealed class AaaMainForm : Form
             _config.OutputRenderDevice = output;
             _config.MusicInputRenderDevice = inputA;
             _config.ShakerInputRenderDevice = inputB;
-            _config.Validate();
+            _config.Validate(requireDevices: false);
 
             StopRouter();
             _router = new WasapiDualRouter(_config);

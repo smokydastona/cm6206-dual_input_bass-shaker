@@ -7,6 +7,10 @@ namespace Cm6206DualRouter;
 
 internal sealed class AaaMainView : UserControl
 {
+    private Image? _cachedBackground;
+    private Image? _cachedAppIcon;
+    private bool _assetLoadStarted;
+
     private readonly TableLayoutPanel _root;
     private readonly TableLayoutPanel _content;
 
@@ -122,7 +126,6 @@ internal sealed class AaaMainView : UserControl
         headerLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 44));
 
         _appIcon = new PictureBox { SizeMode = PictureBoxSizeMode.CenterImage, Dock = DockStyle.Fill };
-        _appIcon.Image = AaaAssets.TryGetPng("icon_device_24x24.png");
         _title = new Label { Text = "CM6206 Dual-Input Bass Shaker", AutoSize = true, ForeColor = NeonTheme.TextPrimary, Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft };
 
         DevicePill = new StatusPill { Dock = DockStyle.Fill, Text = "Device: (unknown)" };
@@ -366,9 +369,47 @@ internal sealed class AaaMainView : UserControl
         ApplyScaledLayout();
     }
 
+    protected override void OnHandleCreated(EventArgs e)
+    {
+        base.OnHandleCreated(e);
+        StartAssetLoads();
+    }
+
+    private void StartAssetLoads()
+    {
+        if (_assetLoadStarted) return;
+        _assetLoadStarted = true;
+
+        // Never block UI thread on PNG decode / disk reads.
+        _ = System.Threading.Tasks.Task.Run(() =>
+        {
+            try
+            {
+                var icon = AaaAssets.TryGetPng("icon_device_24x24.png");
+                var bg = AaaAssets.TryGetPng("background_1920x1080.png");
+
+                if (IsDisposed) return;
+                BeginInvoke(new Action(() =>
+                {
+                    if (IsDisposed) return;
+
+                    _cachedAppIcon = icon;
+                    _cachedBackground = bg;
+                    if (_cachedAppIcon is not null)
+                        _appIcon.Image = _cachedAppIcon;
+                    Invalidate();
+                }));
+            }
+            catch
+            {
+                // ignore
+            }
+        });
+    }
+
     protected override void OnPaintBackground(PaintEventArgs e)
     {
-        var bg = AaaAssets.TryGetPng("background_1920x1080.png");
+        var bg = _cachedBackground;
         if (bg is null)
         {
             base.OnPaintBackground(e);
