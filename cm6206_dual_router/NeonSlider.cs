@@ -15,6 +15,7 @@ internal sealed class NeonSlider : Control
     private float _hoverT;
 
     private readonly System.Windows.Forms.Timer _anim = new();
+    private bool _animStarted;
 
     public NeonSlider()
     {
@@ -34,7 +35,43 @@ internal sealed class NeonSlider : Control
             if (_hoverT > target) _hoverT = Math.Max(target, _hoverT - step);
             Invalidate();
         };
+    }
+
+    protected override void OnHandleCreated(EventArgs e)
+    {
+        base.OnHandleCreated(e);
+        StartAnimIfNeeded();
+    }
+
+    protected override void OnHandleDestroyed(EventArgs e)
+    {
+        StopAnimIfNeeded();
+        base.OnHandleDestroyed(e);
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            StopAnimIfNeeded();
+            _anim.Dispose();
+        }
+
+        base.Dispose(disposing);
+    }
+
+    private void StartAnimIfNeeded()
+    {
+        if (_animStarted) return;
+        _animStarted = true;
         _anim.Start();
+    }
+
+    private void StopAnimIfNeeded()
+    {
+        if (!_animStarted) return;
+        _anim.Stop();
+        _animStarted = false;
     }
 
     public int Minimum

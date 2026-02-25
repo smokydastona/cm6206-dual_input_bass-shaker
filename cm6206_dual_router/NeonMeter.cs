@@ -13,6 +13,7 @@ internal sealed class NeonMeter : Control
     private float _clipPhase;
 
     private readonly System.Windows.Forms.Timer _timer = new();
+    private bool _timerStarted;
 
     public NeonMeter()
     {
@@ -47,7 +48,43 @@ internal sealed class NeonMeter : Control
 
             Invalidate();
         };
+    }
+
+    protected override void OnHandleCreated(EventArgs e)
+    {
+        base.OnHandleCreated(e);
+        StartTimerIfNeeded();
+    }
+
+    protected override void OnHandleDestroyed(EventArgs e)
+    {
+        StopTimerIfNeeded();
+        base.OnHandleDestroyed(e);
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            StopTimerIfNeeded();
+            _timer.Dispose();
+        }
+
+        base.Dispose(disposing);
+    }
+
+    private void StartTimerIfNeeded()
+    {
+        if (_timerStarted) return;
+        _timerStarted = true;
         _timer.Start();
+    }
+
+    private void StopTimerIfNeeded()
+    {
+        if (!_timerStarted) return;
+        _timer.Stop();
+        _timerStarted = false;
     }
 
     public bool Vertical { get; set; } = true;

@@ -14,6 +14,7 @@ internal sealed class NeonMatrixControl : Control
     private float _selectT;
 
     private readonly System.Windows.Forms.Timer _anim = new();
+    private bool _animStarted;
 
     public NeonMatrixControl(int rows = 6, int cols = 2)
     {
@@ -39,13 +40,49 @@ internal sealed class NeonMatrixControl : Control
 
             if (any) Invalidate();
         };
-        _anim.Start();
 
         Size = new Size(360, 240);
         MinimumSize = new Size(320, 220);
 
         RowLabels = new[] { "Front", "Center", "LFE", "Rear", "Side", "Reserved" };
         ColLabels = new[] { "A", "B" };
+    }
+
+    protected override void OnHandleCreated(EventArgs e)
+    {
+        base.OnHandleCreated(e);
+        StartAnimIfNeeded();
+    }
+
+    protected override void OnHandleDestroyed(EventArgs e)
+    {
+        StopAnimIfNeeded();
+        base.OnHandleDestroyed(e);
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            StopAnimIfNeeded();
+            _anim.Dispose();
+        }
+
+        base.Dispose(disposing);
+    }
+
+    private void StartAnimIfNeeded()
+    {
+        if (_animStarted) return;
+        _animStarted = true;
+        _anim.Start();
+    }
+
+    private void StopAnimIfNeeded()
+    {
+        if (!_animStarted) return;
+        _anim.Stop();
+        _animStarted = false;
     }
 
     public int Rows { get; }
