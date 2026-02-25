@@ -1,3 +1,4 @@
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingPlainTextForPassword', '', Justification='Uses PSCredential; password is stored as SecureString and provided to Export-PfxCertificate.')]
 param(
   [string]$SubjectName = "SmokyDaStona",
   [string]$OutputDir = ".\\codesign_dev",

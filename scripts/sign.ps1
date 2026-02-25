@@ -1,3 +1,4 @@
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingPlainTextForPassword', '', Justification='Uses PSCredential and never accepts plaintext password parameters. The password is only passed to signtool as required by its CLI.')]
 param(
   [Parameter(Mandatory=$true)][string]$File,
   [Parameter(Mandatory=$true)][string]$PfxPath,
