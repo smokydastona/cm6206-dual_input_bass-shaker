@@ -9,7 +9,6 @@ internal sealed class SetupAssistantPanel : UserControl
     {
         Text = "Setup Assistant",
         AutoSize = true,
-        Font = NeonTheme.CreateBaseFont(12, FontStyle.Bold),
         ForeColor = NeonTheme.TextPrimary
     };
 

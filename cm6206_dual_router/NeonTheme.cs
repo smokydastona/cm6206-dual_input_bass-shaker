@@ -29,24 +29,9 @@ internal static class NeonTheme
     public static readonly Color MeterHigh = ColorTranslator.FromHtml("#FFB000");
     public static readonly Color MeterClip = ColorTranslator.FromHtml("#FF3B3B");
 
-    private static readonly Font BaseUiFont = GetSystemUiFont();
-    private static readonly Font MonoUiFont = GetSystemUiFont();
+    // NOTE: Keep these extremely conservative. Some machines can hang during GDI font creation.
+    // Returning the WinForms default font avoids us touching the font subsystem during static init.
+    public static Font CreateBaseFont(float sizePx, FontStyle style = FontStyle.Regular) => Control.DefaultFont;
 
-    // NOTE: These intentionally return shared system fonts (no custom construction) to avoid
-    // rare-but-real startup hangs during GDI font creation on some machines.
-    public static Font CreateBaseFont(float sizePx, FontStyle style = FontStyle.Regular) => BaseUiFont;
-
-    public static Font CreateMonoFont(float sizePx, FontStyle style = FontStyle.Regular) => MonoUiFont;
-
-    private static Font GetSystemUiFont()
-    {
-        try
-        {
-            return SystemFonts.MessageBoxFont ?? SystemFonts.DefaultFont;
-        }
-        catch
-        {
-            return Control.DefaultFont;
-        }
-    }
+    public static Font CreateMonoFont(float sizePx, FontStyle style = FontStyle.Regular) => Control.DefaultFont;
 }

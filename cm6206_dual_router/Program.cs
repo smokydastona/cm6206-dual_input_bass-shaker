@@ -86,8 +86,10 @@ internal static class Program
             {
                 AppLog.Info("Launching WinForms UI...");
                 ApplicationConfiguration.Initialize();
-                AppLog.Info("Entering Application.Run...");
-                Application.Run(new RouterMainForm(configPath));
+                AppLog.Info("Creating RouterMainForm...");
+                var form = new RouterMainForm(configPath);
+                AppLog.Info("RouterMainForm created; entering Application.Run...");
+                Application.Run(form);
                 AppLog.Info("Application.Run returned; exiting UI mode.");
                 return;
             }
