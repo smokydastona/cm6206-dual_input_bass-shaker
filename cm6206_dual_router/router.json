@@ -20,6 +20,8 @@
 
   "mixingMode": "FrontBoth",
 
+  "groupRouting": null,
+
   "lfeGainDb": -6.0,
   "rearGainDb": 0.0,
   "sideGainDb": 0.0,

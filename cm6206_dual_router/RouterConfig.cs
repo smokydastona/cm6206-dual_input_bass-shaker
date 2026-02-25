@@ -54,6 +54,13 @@ public sealed class RouterConfig
     [JsonPropertyName("mixingMode")]
     public string MixingMode { get; set; } = "FrontBoth";
 
+    // Optional: explicit routing matrix (6 rows x 2 cols) that overrides mixingMode.
+    // Row order: Front, Center, LFE, Rear, Side, Reserved.
+    // Col order: A (Music), B (Shaker).
+    // Stored row-major: index = row*2 + col.
+    [JsonPropertyName("groupRouting")]
+    public bool[]? GroupRouting { get; set; } = null;
+
     [JsonPropertyName("musicHighPassHz")]
     public float? MusicHighPassHz { get; set; } = null;
 
@@ -219,6 +226,9 @@ public sealed class RouterConfig
             if (MusicHighPassHz <= 0 || MusicLowPassHz <= 0 || MusicHighPassHz >= MusicLowPassHz)
                 throw new InvalidOperationException("musicHighPassHz must be >0 and < musicLowPassHz");
         }
+
+        if (GroupRouting is not null && GroupRouting.Length != 12)
+            throw new InvalidOperationException("groupRouting must be an array of 12 bools (6x2 matrix)");
     }
 
     public RouterConfig Clone()
@@ -230,6 +240,7 @@ public sealed class RouterConfig
         c.ChannelMute = ChannelMute?.ToArray();
         c.ChannelSolo = ChannelSolo?.ToArray();
         c.ChannelInvert = ChannelInvert?.ToArray();
+        c.GroupRouting = GroupRouting?.ToArray();
         return c;
     }
 }

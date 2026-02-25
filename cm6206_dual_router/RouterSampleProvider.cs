@@ -183,71 +183,125 @@ public sealed class RouterSampleProvider : ISampleProvider
                 // - Front channels can carry BOTH streams or just Music (see mixingMode)
                 // - Rear/Side channels carry shaker (distributed)
                 // - LFE gets mono sum of shaker (+ optionally music if you set musicLowPassHz)
-                var mode = (_config.MixingMode ?? "FrontBoth").Trim();
-                var isDedicated = mode.Equals("Dedicated", StringComparison.OrdinalIgnoreCase);
-                var isMusicOnly = mode.Equals("MusicOnly", StringComparison.OrdinalIgnoreCase);
-                var isShakerOnly = mode.Equals("ShakerOnly", StringComparison.OrdinalIgnoreCase);
+                float frontL;
+                float frontR;
+                float center;
+                float lfe;
+                float backL;
+                float backR;
+                float sideL;
+                float sideR;
 
-                var isPriorityMusic = mode.Equals("PriorityMusic", StringComparison.OrdinalIgnoreCase);
-                var isPriorityShaker = mode.Equals("PriorityShaker", StringComparison.OrdinalIgnoreCase);
-
-                if (isPriorityMusic || isPriorityShaker)
+                if (_config.GroupRouting is not null)
                 {
-                    // Update simple peak envelopes.
-                    var curMusic = Math.Max(Math.Abs(mL), Math.Abs(mR));
-                    var curShaker = Math.Max(Math.Abs(sL), Math.Abs(sR));
-                    _musicEnv = Math.Max(curMusic, _musicEnv * _envDecay);
-                    _shakerEnv = Math.Max(curShaker, _shakerEnv * _envDecay);
+                    // Explicit group routing override (6x2).
+                    // Row order: Front, Center, LFE, Rear, Side, Reserved.
+                    // Col order: A (Music), B (Shaker).
+                    var gr = _config.GroupRouting;
+                    bool R(int row, int col) => gr[row * 2 + col];
 
-                    // Hysteresis to avoid rapid flipping.
-                    const float ratio = 1.5f; // ~3.5 dB
-                    if (_priorityUseMusic)
+                    var frontA = R(0, 0);
+                    var frontB = R(0, 1);
+                    var centerA = R(1, 0);
+                    var centerB = R(1, 1);
+                    var lfeA = R(2, 0);
+                    var lfeB = R(2, 1);
+                    var rearA = R(3, 0);
+                    var rearB = R(3, 1);
+                    var sideA = R(4, 0);
+                    var sideB = R(4, 1);
+
+                    frontL = (frontA ? mL : 0f) + (frontB ? sL : 0f);
+                    frontR = (frontA ? mR : 0f) + (frontB ? sR : 0f);
+
+                    center = 0f;
+                    if (_config.UseCenterChannel)
                     {
-                        if (_shakerEnv > _musicEnv * ratio)
-                            _priorityUseMusic = false;
+                        var monoA = (mL + mR) * 0.5f;
+                        var monoB = (sL + sR) * 0.5f;
+                        center = (centerA ? monoA : 0f) + (centerB ? monoB : 0f);
                     }
-                    else
+
+                    var lfeMono = 0f;
+                    if (lfeA) lfeMono += (mL + mR) * 0.5f;
+                    if (lfeB) lfeMono += (sL + sR) * 0.5f;
+                    lfe = lfeMono * _lfeGain;
+
+                    backL = ((rearA ? mL : 0f) + (rearB ? sL : 0f)) * _rearGain;
+                    backR = ((rearA ? mR : 0f) + (rearB ? sR : 0f)) * _rearGain;
+
+                    sideL = ((sideA ? mL : 0f) + (sideB ? sL : 0f)) * _sideGain;
+                    sideR = ((sideA ? mR : 0f) + (sideB ? sR : 0f)) * _sideGain;
+                }
+                else
+                {
+                    // Legacy behavior: mixingMode controls the mix strategy.
+                    var mode = (_config.MixingMode ?? "FrontBoth").Trim();
+                    var isDedicated = mode.Equals("Dedicated", StringComparison.OrdinalIgnoreCase);
+                    var isMusicOnly = mode.Equals("MusicOnly", StringComparison.OrdinalIgnoreCase);
+                    var isShakerOnly = mode.Equals("ShakerOnly", StringComparison.OrdinalIgnoreCase);
+
+                    var isPriorityMusic = mode.Equals("PriorityMusic", StringComparison.OrdinalIgnoreCase);
+                    var isPriorityShaker = mode.Equals("PriorityShaker", StringComparison.OrdinalIgnoreCase);
+
+                    if (isPriorityMusic || isPriorityShaker)
                     {
-                        if (_musicEnv > _shakerEnv * ratio)
+                        // Update simple peak envelopes.
+                        var curMusic = Math.Max(Math.Abs(mL), Math.Abs(mR));
+                        var curShaker = Math.Max(Math.Abs(sL), Math.Abs(sR));
+                        _musicEnv = Math.Max(curMusic, _musicEnv * _envDecay);
+                        _shakerEnv = Math.Max(curShaker, _shakerEnv * _envDecay);
+
+                        // Hysteresis to avoid rapid flipping.
+                        const float ratio = 1.5f; // ~3.5 dB
+                        if (_priorityUseMusic)
+                        {
+                            if (_shakerEnv > _musicEnv * ratio)
+                                _priorityUseMusic = false;
+                        }
+                        else
+                        {
+                            if (_musicEnv > _shakerEnv * ratio)
+                                _priorityUseMusic = true;
+                        }
+
+                        // Bias when envelopes are close.
+                        if (isPriorityMusic && _musicEnv >= _shakerEnv)
                             _priorityUseMusic = true;
+                        if (isPriorityShaker && _shakerEnv >= _musicEnv)
+                            _priorityUseMusic = false;
+
+                        isMusicOnly = _priorityUseMusic;
+                        isShakerOnly = !_priorityUseMusic;
                     }
 
-                    // Bias when envelopes are close.
-                    if (isPriorityMusic && _musicEnv >= _shakerEnv)
-                        _priorityUseMusic = true;
-                    if (isPriorityShaker && _shakerEnv >= _musicEnv)
-                        _priorityUseMusic = false;
+                    if (isMusicOnly) { sL = 0f; sR = 0f; }
+                    if (isShakerOnly) { mL = 0f; mR = 0f; }
 
-                    isMusicOnly = _priorityUseMusic;
-                    isShakerOnly = !_priorityUseMusic;
-                }
+                    frontL = isDedicated ? mL : (mL + sL);
+                    frontR = isDedicated ? mR : (mR + sR);
 
-                if (isMusicOnly) { sL = 0f; sR = 0f; }
-                if (isShakerOnly) { mL = 0f; mR = 0f; }
+                    // If shaker-only, FrontBoth behavior should still feed shaker to the fronts.
+                    if (isShakerOnly)
+                    {
+                        frontL = sL;
+                        frontR = sR;
+                    }
 
-                var frontL = isDedicated ? mL : (mL + sL);
-                var frontR = isDedicated ? mR : (mR + sR);
+                    lfe = (sL + sR) * 0.5f * _lfeGain;
 
-                // If shaker-only, FrontBoth behavior should still feed shaker to the fronts.
-                if (isShakerOnly)
-                {
-                    frontL = sL;
-                    frontR = sR;
-                }
+                    backL = sL * _rearGain;
+                    backR = sR * _rearGain;
 
-                var lfe = (sL + sR) * 0.5f * _lfeGain;
+                    sideL = sL * _sideGain;
+                    sideR = sR * _sideGain;
 
-                var backL = sL * _rearGain;
-                var backR = sR * _rearGain;
-
-                var sideL = sL * _sideGain;
-                var sideR = sR * _sideGain;
-
-                var center = 0f;
-                if (_config.UseCenterChannel)
-                {
-                    // Light mono feed (optional). If you don’t wire anything to center, leave disabled.
-                    center = (sL + sR) * 0.5f;
+                    center = 0f;
+                    if (_config.UseCenterChannel)
+                    {
+                        // Light mono feed (optional). If you don’t wire anything to center, leave disabled.
+                        center = (sL + sR) * 0.5f;
+                    }
                 }
 
                 var outBase = offset + (frame * outChannels);

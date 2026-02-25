@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text;
 using System.Windows.Forms;
+using System.Drawing;
 using NAudio.CoreAudioApi;
 using System.Diagnostics;
 using System.IO;
@@ -127,6 +128,29 @@ public sealed class RouterMainForm : Form
 
     private readonly System.Windows.Forms.Timer _statusTimer = new();
 
+    private readonly ToolStripDropDownButton _statusPreset = new() { Text = "Preset" };
+
+    // SÖNDBÖUND console (Routing tab)
+    private readonly NeonMatrixControl _consoleMatrix = new(rows: 6, cols: 2);
+    private readonly NeonMeter _consoleMeterA = new() { Vertical = true, Width = 18, Height = 160 };
+    private readonly NeonMeter _consoleMeterB = new() { Vertical = true, Width = 18, Height = 160 };
+
+    private readonly TrackBar _consoleMusicGain = new() { Minimum = -600, Maximum = 200, TickFrequency = 100, Value = 0, Width = 200 };
+    private readonly Label _consoleMusicGainLabel = new() { Text = "0.0 dB", AutoSize = true };
+    private readonly TrackBar _consoleShakerGain = new() { Minimum = -600, Maximum = 200, TickFrequency = 100, Value = 0, Width = 200 };
+    private readonly Label _consoleShakerGainLabel = new() { Text = "0.0 dB", AutoSize = true };
+
+    private readonly ComboBox _consoleInputMode = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 140 };
+
+    private readonly NeonMeter[] _consoleOutMeters = new NeonMeter[8];
+    private readonly TrackBar[] _consoleOutGain = new TrackBar[8];
+    private readonly Label[] _consoleOutGainLabel = new Label[8];
+    private readonly CheckBox[] _consoleOutMute = new CheckBox[8];
+    private readonly CheckBox[] _consoleOutSolo = new CheckBox[8];
+
+    private bool _suppressConsoleSync;
+    private bool _consoleMatrixDirty;
+
     private readonly TrackBar[] _channelSliders = new TrackBar[8];
     private readonly Label[] _channelLabels = new Label[8];
     private readonly CheckBox[] _channelMute = new CheckBox[8];
@@ -184,9 +208,36 @@ public sealed class RouterMainForm : Form
         Height = 620;
         StartPosition = FormStartPosition.CenterScreen;
 
+        DoubleBuffered = true;
+        BackColor = NeonTheme.BgPrimary;
+        ForeColor = NeonTheme.TextPrimary;
+        Font = NeonTheme.CreateBaseFont(13);
+
         _config = LoadOrCreateConfigForUi(_configPath);
 
         var tabs = new TabControl { Dock = DockStyle.Fill };
+        tabs.DrawMode = TabDrawMode.OwnerDrawFixed;
+        tabs.Padding = new Point(14, 6);
+        tabs.DrawItem += (_, e) =>
+        {
+            var page = tabs.TabPages[e.Index];
+            var selected = (e.State & DrawItemState.Selected) == DrawItemState.Selected;
+
+            using var bg = new SolidBrush(selected ? NeonTheme.BgRaised : NeonTheme.BgPanel);
+            e.Graphics.FillRectangle(bg, e.Bounds);
+
+            var textColor = selected ? NeonTheme.TextPrimary : NeonTheme.TextSecondary;
+            using var brush = new SolidBrush(textColor);
+            var textRect = e.Bounds;
+            textRect.Inflate(-10, -4);
+            TextRenderer.DrawText(e.Graphics, page.Text, Font, textRect, textColor, TextFormatFlags.Left | TextFormatFlags.VerticalCenter);
+
+            if (selected)
+            {
+                using var pen = new Pen(Color.FromArgb(180, NeonTheme.NeonCyan), 2f);
+                e.Graphics.DrawLine(pen, e.Bounds.Left + 2, e.Bounds.Bottom - 2, e.Bounds.Right - 2, e.Bounds.Bottom - 2);
+            }
+        };
 
         tabs.TabPages.Add(BuildDevicesTab());
         tabs.TabPages.Add(BuildDiagnosticsTab());
@@ -198,12 +249,14 @@ public sealed class RouterMainForm : Form
 
         Controls.Add(tabs);
 
-        _statusStrip.Items.AddRange(new ToolStripItem[] { _statusRouter, _statusSpacer1, _statusFormat, _statusSpacer2, _statusLatency });
+        _statusStrip.BackColor = NeonTheme.BgPanel;
+        _statusStrip.ForeColor = NeonTheme.TextSecondary;
+        _statusStrip.Items.AddRange(new ToolStripItem[] { _statusRouter, _statusSpacer1, _statusFormat, _statusSpacer2, _statusLatency, _statusPreset });
         Controls.Add(_statusStrip);
 
         _autoStepTimer.Tick += (_, _) => AutoStepTick();
         _profilePollTimer.Tick += (_, _) => AutoProfileSwitchTick();
-        _metersTimer.Interval = 50;
+        _metersTimer.Interval = 16;
         _metersTimer.Tick += (_, _) => UpdateMetersTick();
 
         _statusTimer.Interval = 250;
@@ -231,45 +284,300 @@ public sealed class RouterMainForm : Form
 
     private TabPage BuildRoutingTab()
     {
-        var page = new TabPage("Routing");
+        var page = new TabPage("Routing")
+        {
+            BackColor = NeonTheme.BgPrimary,
+            ForeColor = NeonTheme.TextPrimary
+        };
 
         var root = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
-            ColumnCount = 1,
-            RowCount = 2,
+            ColumnCount = 3,
+            RowCount = 1,
             Padding = new Padding(12)
         };
-        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 260));
+        root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 360));
 
-        root.Controls.Add(new Label
-        {
-            Text = "Effective routing visualization (computed from mixing mode, output map, per-channel gain/mute/solo/invert, and master gain).",
-            AutoSize = true
-        }, 0, 0);
+        var inputs = BuildConsoleInputsPanel();
+        var matrix = BuildConsoleMatrixPanel();
+        var outputs = BuildConsoleOutputsPanel();
 
-        if (_routingGrid.Columns.Count == 0)
-        {
-            _routingGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Out", HeaderText = "Out" });
-            _routingGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Inputs", HeaderText = "Inputs →" });
-            _routingGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Map", HeaderText = "Out <- Raw" });
-            _routingGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "RawDef", HeaderText = "Raw channel definition" });
-            _routingGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Gains", HeaderText = "Gains" });
-            _routingGrid.Columns.Add(new DataGridViewCheckBoxColumn { Name = "Mute", HeaderText = "Mute" });
-            _routingGrid.Columns.Add(new DataGridViewCheckBoxColumn { Name = "Solo", HeaderText = "Solo" });
-            _routingGrid.Columns.Add(new DataGridViewCheckBoxColumn { Name = "Invert", HeaderText = "Invert" });
-        }
-
-        root.Controls.Add(_routingGrid, 0, 1);
+        root.Controls.Add(inputs, 0, 0);
+        root.Controls.Add(matrix, 1, 0);
+        root.Controls.Add(outputs, 2, 0);
 
         page.Controls.Add(root);
         return page;
     }
 
+    private Control BuildConsoleInputsPanel()
+    {
+        var panel = new NeonPanel { Dock = DockStyle.Fill, NoiseOverlay = true };
+
+        var layout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 8,
+            AutoSize = true
+        };
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+
+        layout.Controls.Add(BuildHeader("Inputs"), 0, 0);
+
+        var meterRow = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, FlowDirection = FlowDirection.LeftToRight, WrapContents = false };
+        meterRow.Controls.Add(BuildMeterLabel("A"));
+        meterRow.Controls.Add(_consoleMeterA);
+        meterRow.Controls.Add(new Label { Width = 18 });
+        meterRow.Controls.Add(BuildMeterLabel("B"));
+        meterRow.Controls.Add(_consoleMeterB);
+        layout.Controls.Add(meterRow, 0, 1);
+
+        layout.Controls.Add(new Label { Text = "Gain A (Music)", AutoSize = true, ForeColor = NeonTheme.TextSecondary }, 0, 2);
+        layout.Controls.Add(BuildGainRow(_consoleMusicGain, _consoleMusicGainLabel, onChanged: v =>
+        {
+            if (_suppressConsoleSync) return;
+            _suppressConsoleSync = true;
+            try
+            {
+                _musicGainDb.Value = (decimal)(v / 10.0);
+                _consoleMusicGainLabel.Text = $"{v / 10.0:0.0} dB";
+                if (_router is not null) { _config.MusicGainDb = (float)_musicGainDb.Value; }
+            }
+            finally { _suppressConsoleSync = false; }
+        }), 0, 3);
+
+        layout.Controls.Add(new Label { Text = "Gain B (Shaker)", AutoSize = true, ForeColor = NeonTheme.TextSecondary }, 0, 4);
+        layout.Controls.Add(BuildGainRow(_consoleShakerGain, _consoleShakerGainLabel, onChanged: v =>
+        {
+            if (_suppressConsoleSync) return;
+            _suppressConsoleSync = true;
+            try
+            {
+                _shakerGainDb.Value = (decimal)(v / 10.0);
+                _consoleShakerGainLabel.Text = $"{v / 10.0:0.0} dB";
+                if (_router is not null) { _config.ShakerGainDb = (float)_shakerGainDb.Value; }
+            }
+            finally { _suppressConsoleSync = false; }
+        }), 0, 5);
+
+        layout.Controls.Add(new Label { Text = "Input mode", AutoSize = true, ForeColor = NeonTheme.TextSecondary }, 0, 6);
+        _consoleInputMode.Items.Clear();
+        _consoleInputMode.Items.Add("A");
+        _consoleInputMode.Items.Add("B");
+        _consoleInputMode.Items.Add("A+B");
+        _consoleInputMode.SelectedIndexChanged += (_, _) =>
+        {
+            if (_suppressConsoleSync) return;
+            ApplyConsoleInputModePreset();
+        };
+        layout.Controls.Add(_consoleInputMode, 0, 7);
+
+        panel.Controls.Add(layout);
+        return panel;
+    }
+
+    private Control BuildConsoleMatrixPanel()
+    {
+        var panel = new NeonPanel { Dock = DockStyle.Fill, NoiseOverlay = true };
+
+        _consoleMatrix.RowLabels = new[] { "Front", "Center", "LFE", "Rear", "Side", "Reserved" };
+        _consoleMatrix.ColLabels = new[] { "A", "B" };
+        _consoleMatrix.Dock = DockStyle.Fill;
+        _consoleMatrix.BackColor = NeonTheme.BgPanel;
+        _consoleMatrix.CellsChanged += (_, _) =>
+        {
+            if (_suppressConsoleSync) return;
+            _consoleMatrixDirty = true;
+            _config.GroupRouting = ReadMatrixToConfig();
+            UpdateStatusBar();
+        };
+
+        var layout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 2
+        };
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+
+        layout.Controls.Add(BuildHeader("Routing"), 0, 0);
+        layout.Controls.Add(_consoleMatrix, 0, 1);
+
+        panel.Controls.Add(layout);
+        return panel;
+    }
+
+    private Control BuildConsoleOutputsPanel()
+    {
+        var panel = new NeonPanel { Dock = DockStyle.Fill, NoiseOverlay = true };
+
+        var root = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 2
+        };
+        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+
+        root.Controls.Add(BuildHeader("Outputs"), 0, 0);
+
+        var scroll = new Panel { Dock = DockStyle.Fill, AutoScroll = true };
+        var layout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            ColumnCount = 5,
+            RowCount = 9
+        };
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 46)); // label
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 120)); // meter
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100)); // gain
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 42)); // mute
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 42)); // solo
+
+        layout.Controls.Add(new Label { Text = "Ch", AutoSize = true, ForeColor = NeonTheme.TextSecondary }, 0, 0);
+        layout.Controls.Add(new Label { Text = "Lvl", AutoSize = true, ForeColor = NeonTheme.TextSecondary }, 1, 0);
+        layout.Controls.Add(new Label { Text = "Gain", AutoSize = true, ForeColor = NeonTheme.TextSecondary }, 2, 0);
+        layout.Controls.Add(new Label { Text = "M", AutoSize = true, ForeColor = NeonTheme.TextSecondary }, 3, 0);
+        layout.Controls.Add(new Label { Text = "S", AutoSize = true, ForeColor = NeonTheme.TextSecondary }, 4, 0);
+
+        for (var i = 0; i < 8; i++)
+        {
+            var ch = i;
+            _consoleOutMeters[i] = new NeonMeter { Vertical = false, Width = 110, Height = 14 };
+
+            _consoleOutGain[i] = new TrackBar
+            {
+                Minimum = -240,
+                Maximum = 120,
+                TickFrequency = 60,
+                Value = 0,
+                Width = 160
+            };
+            _consoleOutGainLabel[i] = new Label { Text = "0.0 dB", AutoSize = true, ForeColor = NeonTheme.TextSecondary };
+
+            var gainRow = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, FlowDirection = FlowDirection.LeftToRight, WrapContents = false };
+            gainRow.Controls.Add(_consoleOutGain[i]);
+            gainRow.Controls.Add(_consoleOutGainLabel[i]);
+
+            _consoleOutMute[i] = CreateToggle("M");
+            _consoleOutSolo[i] = CreateToggle("S");
+
+            _consoleOutGain[i].Scroll += (_, _) =>
+            {
+                if (_suppressConsoleSync) return;
+                _suppressConsoleSync = true;
+                try
+                {
+                    _consoleOutGainLabel[ch].Text = $"{_consoleOutGain[ch].Value / 10.0:0.0} dB";
+                    _channelSliders[ch].Value = _consoleOutGain[ch].Value;
+                    _channelLabels[ch].Text = _consoleOutGainLabel[ch].Text;
+                }
+                finally { _suppressConsoleSync = false; }
+            };
+
+            _consoleOutMute[i].CheckedChanged += (_, _) =>
+            {
+                if (_suppressConsoleSync) return;
+                _suppressConsoleSync = true;
+                try { _channelMute[ch].Checked = _consoleOutMute[ch].Checked; }
+                finally { _suppressConsoleSync = false; }
+            };
+            _consoleOutSolo[i].CheckedChanged += (_, _) =>
+            {
+                if (_suppressConsoleSync) return;
+                _suppressConsoleSync = true;
+                try { _channelSolo[ch].Checked = _consoleOutSolo[ch].Checked; }
+                finally { _suppressConsoleSync = false; }
+            };
+
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
+            layout.Controls.Add(new Label { Text = ShortName(i), AutoSize = true, ForeColor = NeonTheme.TextPrimary }, 0, i + 1);
+            layout.Controls.Add(_consoleOutMeters[i], 1, i + 1);
+            layout.Controls.Add(gainRow, 2, i + 1);
+            layout.Controls.Add(_consoleOutMute[i], 3, i + 1);
+            layout.Controls.Add(_consoleOutSolo[i], 4, i + 1);
+        }
+
+        scroll.Controls.Add(layout);
+        root.Controls.Add(scroll, 0, 1);
+        panel.Controls.Add(root);
+        return panel;
+    }
+
+    private static Control BuildHeader(string title)
+    {
+        var row = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, FlowDirection = FlowDirection.LeftToRight, WrapContents = false };
+        var glyph = new Label { Text = "∿", AutoSize = true, ForeColor = NeonTheme.NeonCyan, Font = NeonTheme.CreateBaseFont(18, FontStyle.Bold) };
+        var text = new Label { Text = "  " + title, AutoSize = true, ForeColor = NeonTheme.TextPrimary, Font = NeonTheme.CreateBaseFont(18, FontStyle.Bold) };
+        row.Controls.Add(glyph);
+        row.Controls.Add(text);
+        return row;
+    }
+
+    private static Label BuildMeterLabel(string text)
+        => new() { Text = text, AutoSize = true, ForeColor = NeonTheme.TextSecondary, Padding = new Padding(0, 68, 6, 0) };
+
+    private static Control BuildGainRow(TrackBar slider, Label valueLabel, Action<int> onChanged)
+    {
+        var row = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, FlowDirection = FlowDirection.LeftToRight, WrapContents = false };
+        slider.Scroll += (_, _) => onChanged(slider.Value);
+        row.Controls.Add(slider);
+        valueLabel.Font = NeonTheme.CreateMonoFont(12);
+        row.Controls.Add(valueLabel);
+        return row;
+    }
+
+    private static CheckBox CreateToggle(string text)
+    {
+        var cb = new CheckBox
+        {
+            Appearance = Appearance.Button,
+            Text = text,
+            AutoSize = false,
+            Width = 32,
+            Height = 22,
+            TextAlign = ContentAlignment.MiddleCenter,
+            ForeColor = NeonTheme.TextPrimary,
+            BackColor = NeonTheme.BgRaised,
+            FlatStyle = FlatStyle.Flat
+        };
+        cb.FlatAppearance.BorderColor = Color.FromArgb(120, NeonTheme.NeonPurple);
+        cb.FlatAppearance.BorderSize = 1;
+
+        cb.CheckedChanged += (_, _) =>
+        {
+            if (cb.Checked)
+            {
+                cb.BackColor = Color.FromArgb(80, NeonTheme.NeonCyan);
+                cb.FlatAppearance.BorderColor = NeonTheme.NeonPurple;
+            }
+            else
+            {
+                cb.BackColor = NeonTheme.BgRaised;
+                cb.FlatAppearance.BorderColor = Color.FromArgb(120, NeonTheme.NeonPurple);
+            }
+        };
+
+        return cb;
+    }
+
     private TabPage BuildMetersTab()
     {
-        var page = new TabPage("Meters");
+        var page = new TabPage("Meters") { BackColor = NeonTheme.BgPrimary, ForeColor = NeonTheme.TextPrimary };
 
         var root = new TableLayoutPanel
         {
@@ -376,6 +684,16 @@ public sealed class RouterMainForm : Form
         UpdateMeterUi(_musicMeters, _musicMeterLabels, _musicClipLabels, _displayMusic);
         UpdateMeterUi(_shakerMeters, _shakerMeterLabels, _shakerClipLabels, _displayShaker);
         UpdateMeterUi(_outputMeters, _outputMeterLabels, _outputClipLabels, _displayOut);
+
+        // SÖNDBÖUND console meters
+        _consoleMeterA.Peak = Math.Max(_displayMusic[0], _displayMusic[1]);
+        _consoleMeterB.Peak = Math.Max(_displayShaker[0], _displayShaker[1]);
+        for (var ch = 0; ch < 8; ch++)
+        {
+            var m = _consoleOutMeters[ch];
+            if (m is not null)
+                m.Peak = _displayOut[ch];
+        }
     }
 
     private void ClearMeters()
@@ -387,6 +705,15 @@ public sealed class RouterMainForm : Form
         UpdateMeterUi(_musicMeters, _musicMeterLabels, _musicClipLabels, _displayMusic);
         UpdateMeterUi(_shakerMeters, _shakerMeterLabels, _shakerClipLabels, _displayShaker);
         UpdateMeterUi(_outputMeters, _outputMeterLabels, _outputClipLabels, _displayOut);
+
+        _consoleMeterA.Peak = 0f;
+        _consoleMeterB.Peak = 0f;
+        for (var ch = 0; ch < 8; ch++)
+        {
+            var m = _consoleOutMeters[ch];
+            if (m is not null)
+                m.Peak = 0f;
+        }
     }
 
     private static void UpdateMeterUi(ProgressBar[] bars, Label[] labels, Label[] clipLabels, float[] peaks)
@@ -426,7 +753,7 @@ public sealed class RouterMainForm : Form
 
     private TabPage BuildDevicesTab()
     {
-        var page = new TabPage("Devices");
+        var page = new TabPage("Devices") { BackColor = NeonTheme.BgPrimary, ForeColor = NeonTheme.TextPrimary };
 
         var layout = new TableLayoutPanel
         {
@@ -516,7 +843,7 @@ public sealed class RouterMainForm : Form
 
     private TabPage BuildDiagnosticsTab()
     {
-        var page = new TabPage("Diagnostics");
+        var page = new TabPage("Diagnostics") { BackColor = NeonTheme.BgPrimary, ForeColor = NeonTheme.TextPrimary };
 
         var layout = new TableLayoutPanel
         {
@@ -922,6 +1249,8 @@ public sealed class RouterMainForm : Form
             _profileCombo.SelectedItem = selected;
         else if (_profileCombo.Items.Count > 0)
             _profileCombo.SelectedIndex = 0;
+
+        RefreshStatusPresetMenu();
     }
 
     private void LoadSelectedProfileIntoUi()
@@ -1074,7 +1403,7 @@ public sealed class RouterMainForm : Form
 
     private TabPage BuildDspTab()
     {
-        var page = new TabPage("DSP");
+        var page = new TabPage("DSP") { BackColor = NeonTheme.BgPrimary, ForeColor = NeonTheme.TextPrimary };
 
         var layout = new TableLayoutPanel
         {
@@ -1300,7 +1629,7 @@ public sealed class RouterMainForm : Form
 
     private TabPage BuildChannelsTab()
     {
-        var page = new TabPage("Channels");
+        var page = new TabPage("Channels") { BackColor = NeonTheme.BgPrimary, ForeColor = NeonTheme.TextPrimary };
 
         var root = new TableLayoutPanel
         {
@@ -1547,7 +1876,67 @@ public sealed class RouterMainForm : Form
         temp.ChannelSolo = solo;
         temp.ChannelInvert = invert;
 
+        // Routing matrix override (always captured from console UI)
+        temp.GroupRouting = ReadMatrixToConfig();
+
         return temp;
+    }
+
+    private bool[] ReadMatrixToConfig()
+    {
+        var arr = new bool[12];
+        for (var r = 0; r < 6; r++)
+        {
+            for (var c = 0; c < 2; c++)
+            {
+                arr[r * 2 + c] = _consoleMatrix.Get(r, c);
+            }
+        }
+        return arr;
+    }
+
+    private void ApplyConsoleInputModePreset()
+    {
+        // A/B/A+B presets that match the spec and sane defaults.
+        // Rows: Front, Center, LFE, Rear, Side, Reserved.
+        // Cols: A (Music), B (Shaker).
+        var mode = _consoleInputMode.SelectedItem as string;
+        if (string.IsNullOrWhiteSpace(mode)) return;
+
+        var values = new bool[6, 2];
+        // baseline: everything off
+
+        if (mode == "A")
+        {
+            // Music to fronts only.
+            values[0, 0] = true;
+        }
+        else if (mode == "B")
+        {
+            // Shaker everywhere (including fronts).
+            for (var r = 0; r < 5; r++)
+                values[r, 1] = true;
+        }
+        else // A+B
+        {
+            // Front: A+B, everything else: B.
+            values[0, 0] = true;
+            values[0, 1] = true;
+            for (var r = 1; r < 5; r++)
+                values[r, 1] = true;
+        }
+
+        _suppressConsoleSync = true;
+        try
+        {
+            _consoleMatrix.SetAll(values);
+            _config.GroupRouting = ReadMatrixToConfig();
+            _consoleMatrixDirty = true;
+        }
+        finally
+        {
+            _suppressConsoleSync = false;
+        }
     }
 
     private void UpdateRoutingGrid()
@@ -1642,7 +2031,7 @@ public sealed class RouterMainForm : Form
 
     private TabPage BuildCalibrationTab()
     {
-        var page = new TabPage("Calibration");
+        var page = new TabPage("Calibration") { BackColor = NeonTheme.BgPrimary, ForeColor = NeonTheme.TextPrimary };
 
         var layout = new TableLayoutPanel
         {
@@ -1800,6 +2189,73 @@ public sealed class RouterMainForm : Form
             _ => 0
         };
 
+        // Console sync
+        _suppressConsoleSync = true;
+        try
+        {
+            _consoleMatrixDirty = false;
+
+            _consoleMusicGain.Value = (int)Math.Round(_config.MusicGainDb * 10.0);
+            _consoleMusicGainLabel.Text = $"{_config.MusicGainDb:0.0} dB";
+
+            _consoleShakerGain.Value = (int)Math.Round(_config.ShakerGainDb * 10.0);
+            _consoleShakerGainLabel.Text = $"{_config.ShakerGainDb:0.0} dB";
+
+            // Populate matrix: if config has no override, visualize a sensible preset from mixingMode.
+            var matrix = new bool[6, 2];
+            if (_config.GroupRouting is { Length: 12 } gr)
+            {
+                for (var r = 0; r < 6; r++)
+                    for (var c = 0; c < 2; c++)
+                        matrix[r, c] = gr[r * 2 + c];
+            }
+            else
+            {
+                // approximate current mixingMode
+                var m = (_config.MixingMode ?? "FrontBoth").Trim();
+                if (m.Equals("MusicOnly", StringComparison.OrdinalIgnoreCase))
+                {
+                    matrix[0, 0] = true;
+                }
+                else if (m.Equals("ShakerOnly", StringComparison.OrdinalIgnoreCase))
+                {
+                    for (var r = 0; r < 5; r++) matrix[r, 1] = true;
+                }
+                else if (m.Equals("Dedicated", StringComparison.OrdinalIgnoreCase))
+                {
+                    matrix[0, 0] = true;
+                    for (var r = 1; r < 5; r++) matrix[r, 1] = true;
+                }
+                else
+                {
+                    matrix[0, 0] = true;
+                    matrix[0, 1] = true;
+                    for (var r = 1; r < 5; r++) matrix[r, 1] = true;
+                }
+            }
+            _consoleMatrix.SetAll(matrix);
+
+            // Set input mode dropdown to closest preset
+            if (matrix[0, 0] && !matrix[0, 1])
+                _consoleInputMode.SelectedItem = "A";
+            else if (!matrix[0, 0] && matrix[0, 1])
+                _consoleInputMode.SelectedItem = "B";
+            else
+                _consoleInputMode.SelectedItem = "A+B";
+
+            for (var ch = 0; ch < 8; ch++)
+            {
+                _consoleOutGain[ch].Value = _channelSliders[ch].Value;
+                _consoleOutGainLabel[ch].Text = _channelLabels[ch].Text;
+                _consoleOutMute[ch].Checked = _channelMute[ch].Checked;
+                _consoleOutSolo[ch].Checked = _channelSolo[ch].Checked;
+            }
+        }
+        finally
+        {
+            _suppressConsoleSync = false;
+        }
+
         _latencyMs.Value = _config.LatencyMs;
         _useCenter.Checked = _config.UseCenterChannel;
         _useExclusiveMode.Checked = _config.UseExclusiveMode;
@@ -1873,6 +2329,12 @@ public sealed class RouterMainForm : Form
             _ => "FrontBoth"
         };
 
+        // Routing matrix override: only persist if user edited it (or if it was already present).
+        if (_consoleMatrixDirty || _config.GroupRouting is not null)
+            _config.GroupRouting = ReadMatrixToConfig();
+        else
+            _config.GroupRouting = null;
+
         _config.LatencyMs = (int)_latencyMs.Value;
         _config.UseCenterChannel = _useCenter.Checked;
         _config.UseExclusiveMode = _useExclusiveMode.Checked;
@@ -1922,6 +2384,24 @@ public sealed class RouterMainForm : Form
         UpdateStatusBar();
     }
 
+    private void RefreshStatusPresetMenu()
+    {
+        _statusPreset.DropDownItems.Clear();
+
+        foreach (var p in ProfileStore.LoadAll())
+        {
+            var name = p.Name;
+            var item = new ToolStripMenuItem(name);
+            item.Click += (_, _) =>
+            {
+                _profileCombo.SelectedItem = name;
+                LoadSelectedProfileIntoUi();
+                UpdateStatusBar();
+            };
+            _statusPreset.DropDownItems.Add(item);
+        }
+    }
+
     private static string DescribeInputsForRawChannel(int rawCh, RouterConfig cfg)
     {
         var mode = (cfg.MixingMode ?? "FrontBoth").Trim();
@@ -1945,10 +2425,12 @@ public sealed class RouterMainForm : Form
         var outDev = _outputDeviceCombo.SelectedItem as string;
         var mode = _useExclusiveMode.Checked ? "Exclusive" : "Shared";
         var sr = running ? _router!.EffectiveSampleRate : GetSelectedSampleRate();
+        var preset = _profileCombo.SelectedItem as string;
 
         _statusRouter.Text = running ? "Router: Running" : "Router: Stopped";
         _statusFormat.Text = $"Output: {(string.IsNullOrWhiteSpace(outDev) ? "(not selected)" : outDev)} | {sr} Hz | {mode}";
         _statusLatency.Text = $"Latency: {(int)_latencyMs.Value} ms | Mix: {_mixingModeCombo.SelectedItem}";
+        _statusPreset.Text = string.IsNullOrWhiteSpace(preset) ? "Preset" : $"Preset: {preset}";
     }
 
     private void SaveConfigToDisk(bool showSavedDialog)
