@@ -221,8 +221,9 @@ public sealed class RouterMainForm : Form
     private readonly ComboBox[] _channelMap = new ComboBox[8];
     private readonly Button[] _visualMapButtons = new Button[8];
 
-    private readonly Button _identityMapButton = new() { Text = "Identity map" };
-    private readonly Button _swapSideRearButton = new() { Text = "Swap Side/Rear" };
+    private readonly Button _identityMapButton;
+    private readonly Button _swapSideRearButton;
+    private readonly Button _swapCenterLfeButton;
 
     private readonly Button _refreshButton = new() { Text = "Refresh devices" };
     private readonly Button _saveButton = new() { Text = "Save config" };
@@ -323,6 +324,10 @@ public sealed class RouterMainForm : Form
         _config = LoadOrCreateConfigForUi(_configPath);
 
         AppLog.Info("RouterMainForm ctor: config loaded");
+
+        _identityMapButton = new Button { Text = "Identity map" };
+        _swapSideRearButton = new Button { Text = "Swap Side/Rear" };
+        _swapCenterLfeButton = new Button { Text = "Swap Center/LFE" };
 
         _tabs.DrawMode = TabDrawMode.OwnerDrawFixed;
         _tabs.Padding = new Point(14, 6);
@@ -2512,10 +2517,12 @@ public sealed class RouterMainForm : Form
 
         var buttons = new FlowLayoutPanel { Dock = DockStyle.Top, FlowDirection = FlowDirection.LeftToRight, AutoSize = true };
         buttons.Controls.Add(_identityMapButton);
+        buttons.Controls.Add(_swapCenterLfeButton);
         buttons.Controls.Add(_swapSideRearButton);
         root.Controls.Add(buttons, 0, 0);
 
         _identityMapButton.Click += (_, _) => SetIdentityMap();
+        _swapCenterLfeButton.Click += (_, _) => SwapCenterLfe();
         _swapSideRearButton.Click += (_, _) => SwapSideRear();
 
         var visual = BuildVisualMapGroup();
@@ -3799,5 +3806,13 @@ public sealed class RouterMainForm : Form
         _channelMap[5].SelectedIndex = 7;
         _channelMap[6].SelectedIndex = 4;
         _channelMap[7].SelectedIndex = 5;
+    }
+
+    private void SwapCenterLfe()
+    {
+        // Output channels are: 2 FC, 3 LFE.
+        // Swap source assignment between center and LFE.
+        _channelMap[2].SelectedIndex = 3;
+        _channelMap[3].SelectedIndex = 2;
     }
 }
