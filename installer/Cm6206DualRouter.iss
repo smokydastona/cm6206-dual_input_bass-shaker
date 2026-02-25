@@ -7,7 +7,8 @@
   #define MyAppVersion "0.0.0"
 #endif
 
-#define PublishDir "artifacts\\cm6206_dual_router_win-x64"
+; NOTE: This .iss lives under installer/, so all repo-root paths must be prefixed with ..\\
+#define PublishDir "..\\artifacts\\cm6206_dual_router_win-x64"
 
 [Setup]
 AppId={{8C3B0A18-5D4A-4C89-8C25-37C67A2ACB48}}
@@ -17,7 +18,7 @@ AppPublisher=smokydastona
 DefaultDirName={autopf}\\Cm6206DualRouter
 DefaultGroupName=Cm6206DualRouter
 DisableProgramGroupPage=yes
-OutputDir=artifacts\\installer
+OutputDir=..\\artifacts\\installer
 OutputBaseFilename=Cm6206DualRouterSetup_{#MyAppVersion}
 Compression=lzma2
 SolidCompression=yes
@@ -38,12 +39,12 @@ Name: "desktop_icon"; Description: "Create a desktop icon"; Flags: unchecked
 Source: "{#PublishDir}\\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion
 
 ; Driver payload (minimal subset needed for pnputil)
-Source: "cm6206_extracted\\[CMedia CM6206] Windows USB 7.1 Audio Adapter\\WIN10\\SoftwareDriver\\Driver\\*"; DestDir: "{tmp}\\cm6206_driver"; Flags: recursesubdirs createallsubdirs deleteafterinstall; Tasks: install_driver
+Source: "..\\cm6206_extracted\\[CMedia CM6206] Windows USB 7.1 Audio Adapter\\WIN10\\SoftwareDriver\\Driver\\*"; DestDir: "{tmp}\\cm6206_driver"; Flags: recursesubdirs createallsubdirs deleteafterinstall; Tasks: install_driver
 
 [Run]
 ; Install the driver using pnputil.
 ; Note: pnputil returns non-zero for various cases (already installed, etc.). We keep it best-effort.
-Filename: "{cmd}"; Parameters: "/c pnputil.exe /add-driver \"{tmp}\\cm6206_driver\\CMUAC.inf\" /install"; Flags: runhidden waituntilterminated ignoreerrors; Tasks: install_driver
+Filename: "{sys}\\pnputil.exe"; Parameters: "/add-driver ""{tmp}\\cm6206_driver\\CMUAC.inf"" /install"; Flags: runhidden waituntilterminated ignoreerrors; Tasks: install_driver
 
 ; Launch the app after install
 Filename: "{app}\\Cm6206DualRouter.exe"; Description: "Launch {#MyAppName}"; Flags: nowait postinstall skipifsilent
