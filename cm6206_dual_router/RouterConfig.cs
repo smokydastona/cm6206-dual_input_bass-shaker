@@ -151,8 +151,6 @@ public sealed class RouterConfig
         {
             if (string.IsNullOrWhiteSpace(MusicInputRenderDevice))
                 throw new InvalidOperationException("musicInputRenderDevice is required");
-            if (string.IsNullOrWhiteSpace(ShakerInputRenderDevice))
-                throw new InvalidOperationException("shakerInputRenderDevice is required");
             if (string.IsNullOrWhiteSpace(OutputRenderDevice))
                 throw new InvalidOperationException("outputRenderDevice is required");
         }

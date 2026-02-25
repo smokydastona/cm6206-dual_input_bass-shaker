@@ -4,6 +4,9 @@ namespace Cm6206DualRouter;
 
 public static class DeviceHelper
 {
+    public const string DefaultSystemRenderDevice = "Default Game Output";
+    public const string NoneDevice = "(None)";
+
     public static void PrintRenderDevices()
     {
         using var enumerator = new MMDeviceEnumerator();
@@ -36,6 +39,16 @@ public static class DeviceHelper
 
     public static MMDevice GetRenderDeviceByFriendlyName(string friendlyName)
     {
+        if (string.Equals(friendlyName?.Trim(), DefaultSystemRenderDevice, StringComparison.OrdinalIgnoreCase))
+        {
+            using var enumeratorDefault = new MMDeviceEnumerator();
+            // Multimedia is the common "default output" for games/desktop audio.
+            return enumeratorDefault.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
+        }
+
+        if (string.Equals(friendlyName?.Trim(), NoneDevice, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Device '(None)' cannot be opened as an audio device.");
+
         using var enumerator = new MMDeviceEnumerator();
         var devices = enumerator.EnumerateAudioEndPoints(DataFlow.Render, DeviceState.Active);
 

@@ -12,6 +12,49 @@ public sealed class RouterMainForm : Form
 {
     private readonly string _configPath;
 
+    private UiState _uiState;
+    private string? _lastStartError;
+    private DateTime _lastOutputCheckUtc = DateTime.MinValue;
+    private bool _cachedOutputOk = true;
+
+    private readonly TabControl _tabs = new() { Dock = DockStyle.Fill };
+    private TabPage? _simplePage;
+    private TabPage? _devicesPage;
+    private TabPage? _diagnosticsPage;
+    private TabPage? _dspPage;
+    private TabPage? _routingPage;
+    private TabPage? _channelsPage;
+    private TabPage? _metersPage;
+    private TabPage? _calibrationPage;
+
+    // Simple Mode controls
+    private readonly ComboBox _simpleGameSourceCombo = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 520 };
+    private readonly ComboBox _simpleSecondarySourceCombo = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 520 };
+    private readonly ComboBox _simpleOutputCombo = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 520 };
+
+    private readonly ComboBox _simplePresetCombo = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 300 };
+    private readonly Label _simplePresetSummary = new() { AutoSize = true, ForeColor = NeonTheme.TextMuted };
+
+    private readonly NeonSlider _simpleMasterGain = new() { Minimum = -600, Maximum = 200, Value = 0, Width = 260 };
+    private readonly Label _simpleMasterGainLabel = new() { Text = "0.0 dB", AutoSize = true, ForeColor = NeonTheme.TextSecondary };
+
+    private readonly NeonSlider _simpleShakerStrength = new() { Minimum = -240, Maximum = 120, Value = -60, Width = 260 };
+    private readonly Label _simpleShakerStrengthLabel = new() { Text = "-6.0 dB", AutoSize = true, ForeColor = NeonTheme.TextSecondary };
+
+    private readonly Button _simpleStartButton = new() { Text = "▶ Start Routing", Width = 260, Height = 44 };
+    private readonly Button _simpleStopButton = new() { Text = "■ Stop", Width = 120, Height = 44, Enabled = false };
+    private readonly CheckBox _simpleAdvancedToggle = new() { Text = "⚙ Advanced Controls", AutoSize = true };
+    private readonly Label _simpleStatus = new() { Text = "", AutoSize = true };
+    private readonly Label _simpleNextHint = new()
+    {
+        Text = "New here?  1) Select devices   2) Pick a preset   3) Press Start",
+        AutoSize = true,
+        ForeColor = NeonTheme.TextMuted
+    };
+
+    private readonly SignalFlowControl _simpleFlow = new() { Dock = DockStyle.Top };
+    private readonly ToolTip _toolTip = new() { AutomaticDelay = 200, AutoPopDelay = 6000, ReshowDelay = 200, InitialDelay = 250, ShowAlways = true };
+
     private readonly ComboBox _profileCombo = new() { DropDownStyle = ComboBoxStyle.DropDownList };
     private readonly Button _profileLoadButton = new() { Text = "Load" };
     private readonly Button _profileSaveAsButton = new() { Text = "Save As" };
@@ -120,6 +163,7 @@ public sealed class RouterMainForm : Form
     };
 
     private readonly StatusStrip _statusStrip = new() { Dock = DockStyle.Bottom };
+    private readonly ToolStripStatusLabel _statusHealth = new() { Text = "", Font = new Font(SystemFonts.DefaultFont, FontStyle.Bold) };
     private readonly ToolStripStatusLabel _statusRouter = new() { Text = "Router: (unknown)" };
     private readonly ToolStripStatusLabel _statusSpacer1 = new() { Spring = true };
     private readonly ToolStripStatusLabel _statusFormat = new() { Text = "Format: (unknown)" };
@@ -213,14 +257,15 @@ public sealed class RouterMainForm : Form
         ForeColor = NeonTheme.TextPrimary;
         Font = NeonTheme.CreateBaseFont(13);
 
+        _uiState = UiStateStore.Load();
+
         _config = LoadOrCreateConfigForUi(_configPath);
 
-        var tabs = new TabControl { Dock = DockStyle.Fill };
-        tabs.DrawMode = TabDrawMode.OwnerDrawFixed;
-        tabs.Padding = new Point(14, 6);
-        tabs.DrawItem += (_, e) =>
+        _tabs.DrawMode = TabDrawMode.OwnerDrawFixed;
+        _tabs.Padding = new Point(14, 6);
+        _tabs.DrawItem += (_, e) =>
         {
-            var page = tabs.TabPages[e.Index];
+            var page = _tabs.TabPages[e.Index];
             var selected = (e.State & DrawItemState.Selected) == DrawItemState.Selected;
 
             using var bg = new SolidBrush(selected ? NeonTheme.BgRaised : NeonTheme.BgPanel);
@@ -239,19 +284,21 @@ public sealed class RouterMainForm : Form
             }
         };
 
-        tabs.TabPages.Add(BuildDevicesTab());
-        tabs.TabPages.Add(BuildDiagnosticsTab());
-        tabs.TabPages.Add(BuildDspTab());
-        tabs.TabPages.Add(BuildRoutingTab());
-        tabs.TabPages.Add(BuildChannelsTab());
-        tabs.TabPages.Add(BuildMetersTab());
-        tabs.TabPages.Add(BuildCalibrationTab());
+        _simplePage = BuildSimpleTab();
+        _devicesPage = BuildDevicesTab();
+        _diagnosticsPage = BuildDiagnosticsTab();
+        _dspPage = BuildDspTab();
+        _routingPage = BuildRoutingTab();
+        _channelsPage = BuildChannelsTab();
+        _metersPage = BuildMetersTab();
+        _calibrationPage = BuildCalibrationTab();
 
-        Controls.Add(tabs);
+        RebuildTabs(showAdvanced: _uiState.ShowAdvancedControls);
+        Controls.Add(_tabs);
 
         _statusStrip.BackColor = NeonTheme.BgPanel;
         _statusStrip.ForeColor = NeonTheme.TextSecondary;
-        _statusStrip.Items.AddRange(new ToolStripItem[] { _statusRouter, _statusSpacer1, _statusFormat, _statusSpacer2, _statusLatency, _statusPreset });
+        _statusStrip.Items.AddRange(new ToolStripItem[] { _statusHealth, _statusRouter, _statusSpacer1, _statusFormat, _statusSpacer2, _statusLatency, _statusPreset });
         Controls.Add(_statusStrip);
 
         ApplyNeonTheme(this);
@@ -282,6 +329,28 @@ public sealed class RouterMainForm : Form
 
         UpdateDiagnostics();
         UpdateStatusBar();
+    }
+
+    private void RebuildTabs(bool showAdvanced)
+    {
+        _tabs.TabPages.Clear();
+
+        if (_simplePage is not null)
+            _tabs.TabPages.Add(_simplePage);
+
+        if (!showAdvanced)
+        {
+            _tabs.SelectedTab = _simplePage;
+            return;
+        }
+
+        if (_devicesPage is not null) _tabs.TabPages.Add(_devicesPage);
+        if (_diagnosticsPage is not null) _tabs.TabPages.Add(_diagnosticsPage);
+        if (_dspPage is not null) _tabs.TabPages.Add(_dspPage);
+        if (_routingPage is not null) _tabs.TabPages.Add(_routingPage);
+        if (_channelsPage is not null) _tabs.TabPages.Add(_channelsPage);
+        if (_metersPage is not null) _tabs.TabPages.Add(_metersPage);
+        if (_calibrationPage is not null) _tabs.TabPages.Add(_calibrationPage);
     }
 
     private static void ApplyNeonTheme(Control root)
@@ -396,6 +465,277 @@ public sealed class RouterMainForm : Form
 
         page.Controls.Add(root);
         return page;
+    }
+
+    private TabPage BuildSimpleTab()
+    {
+        var page = new TabPage("Simple")
+        {
+            BackColor = NeonTheme.BgPrimary,
+            ForeColor = NeonTheme.TextPrimary
+        };
+
+        var root = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 7,
+            Padding = new Padding(12)
+        };
+        root.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // flow
+        root.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // header
+        root.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // devices
+        root.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // presets
+        root.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // sliders
+        root.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // buttons + advanced
+        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); // hint
+
+        _simpleFlow.Margin = new Padding(0, 0, 0, 10);
+        root.Controls.Add(_simpleFlow, 0, 0);
+
+        var headerRow = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, FlowDirection = FlowDirection.LeftToRight, WrapContents = false };
+        var title = new Label { Text = "Quick Start", AutoSize = true, Font = NeonTheme.CreateBaseFont(20, FontStyle.Bold), ForeColor = NeonTheme.TextPrimary };
+        var subtitle = new Label { Text = "  (2-minute setup)", AutoSize = true, Font = NeonTheme.CreateBaseFont(12), ForeColor = NeonTheme.TextMuted, Padding = new Padding(0, 7, 0, 0) };
+        var help = new Button { Text = "?", Width = 34, Height = 28, Margin = new Padding(14, 4, 0, 0) };
+        help.Click += (_, _) =>
+        {
+            MessageBox.Show(this,
+                "What do I do next?\n\n1) Select your Game Audio Source\n2) Select Output Device (CM6206 7.1)\n3) Pick a preset\n4) Press Start Routing\n\nIf you hear no shaker: increase Bass Shaker strength.",
+                "Quick Start",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
+        };
+        headerRow.Controls.Add(title);
+        headerRow.Controls.Add(subtitle);
+        headerRow.Controls.Add(help);
+        root.Controls.Add(headerRow, 0, 1);
+
+        var devicesPanel = new NeonPanel { Dock = DockStyle.Top, NoiseOverlay = true, Padding = new Padding(14), AutoSize = true };
+        var devicesLayout = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 2, RowCount = 6 };
+        devicesLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 210));
+        devicesLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+
+        devicesLayout.Controls.Add(new Label { Text = "Game audio source", AutoSize = true, ForeColor = NeonTheme.TextPrimary }, 0, 0);
+        devicesLayout.Controls.Add(_simpleGameSourceCombo, 1, 0);
+        devicesLayout.Controls.Add(new Label { Text = "Capture system audio", AutoSize = true, ForeColor = NeonTheme.TextMuted, Font = NeonTheme.CreateMonoFont(10) }, 1, 1);
+
+        devicesLayout.Controls.Add(new Label { Text = "Music / secondary source", AutoSize = true, ForeColor = NeonTheme.TextPrimary }, 0, 2);
+        devicesLayout.Controls.Add(_simpleSecondarySourceCombo, 1, 2);
+        devicesLayout.Controls.Add(new Label { Text = "Optional second source", AutoSize = true, ForeColor = NeonTheme.TextMuted, Font = NeonTheme.CreateMonoFont(10) }, 1, 3);
+
+        devicesLayout.Controls.Add(new Label { Text = "Output device", AutoSize = true, ForeColor = NeonTheme.TextPrimary }, 0, 4);
+        devicesLayout.Controls.Add(_simpleOutputCombo, 1, 4);
+        devicesLayout.Controls.Add(new Label { Text = "Audio device", AutoSize = true, ForeColor = NeonTheme.TextMuted, Font = NeonTheme.CreateMonoFont(10) }, 1, 5);
+
+        devicesPanel.Controls.Add(devicesLayout);
+        root.Controls.Add(devicesPanel, 0, 2);
+
+        _toolTip.SetToolTip(_simpleGameSourceCombo, "Choose where your game audio plays (we capture that audio).");
+        _toolTip.SetToolTip(_simpleSecondarySourceCombo, "Optional: a second source (music player, browser, etc).");
+        _toolTip.SetToolTip(_simpleOutputCombo, "Choose where the mixed audio will play (usually CM6206 7.1).");
+
+        var presetPanel = new NeonPanel { Dock = DockStyle.Top, NoiseOverlay = true, Padding = new Padding(14), AutoSize = true };
+        var presetRow = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, FlowDirection = FlowDirection.LeftToRight, WrapContents = true };
+        presetRow.Controls.Add(new Label { Text = "Preset", AutoSize = true, ForeColor = NeonTheme.TextPrimary, Padding = new Padding(0, 6, 8, 0) });
+        presetRow.Controls.Add(_simplePresetCombo);
+        presetRow.Controls.Add(new Label { Text = "  ", AutoSize = true });
+        presetRow.Controls.Add(_simplePresetSummary);
+        presetPanel.Controls.Add(presetRow);
+        root.Controls.Add(presetPanel, 0, 3);
+
+        _toolTip.SetToolTip(_simplePresetCombo, "Presets configure speakers vs bass shaker routing.");
+
+        var slidersPanel = new NeonPanel { Dock = DockStyle.Top, NoiseOverlay = true, Padding = new Padding(14), AutoSize = true };
+        var slidersLayout = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 2, RowCount = 4 };
+        slidersLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 210));
+        slidersLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+
+        slidersLayout.Controls.Add(new Label { Text = "Master volume", AutoSize = true, ForeColor = NeonTheme.TextPrimary }, 0, 0);
+        slidersLayout.Controls.Add(BuildGainRow(_simpleMasterGain, _simpleMasterGainLabel, onChanged: v =>
+        {
+            if (_suppressConsoleSync) return;
+            _suppressConsoleSync = true;
+            try
+            {
+                _masterGainDb.Value = (decimal)(v / 10.0);
+                _simpleMasterGainLabel.Text = $"{v / 10.0:0.0} dB";
+                if (_router is not null) _config.MasterGainDb = (float)_masterGainDb.Value;
+            }
+            finally { _suppressConsoleSync = false; }
+        }), 1, 0);
+        slidersLayout.Controls.Add(new Label { Text = "Overall loudness", AutoSize = true, ForeColor = NeonTheme.TextMuted, Font = NeonTheme.CreateMonoFont(10) }, 1, 1);
+
+        slidersLayout.Controls.Add(new Label { Text = "Bass shaker strength", AutoSize = true, ForeColor = NeonTheme.TextPrimary }, 0, 2);
+        slidersLayout.Controls.Add(BuildGainRow(_simpleShakerStrength, _simpleShakerStrengthLabel, onChanged: v =>
+        {
+            if (_suppressConsoleSync) return;
+            _suppressConsoleSync = true;
+            try
+            {
+                var db = v / 10.0f;
+                _simpleShakerStrengthLabel.Text = $"{db:0.0} dB";
+                if (_router is not null) _config.LfeGainDb = db;
+            }
+            finally { _suppressConsoleSync = false; }
+        }), 1, 2);
+        slidersLayout.Controls.Add(new Label { Text = "How strong the shaker feels", AutoSize = true, ForeColor = NeonTheme.TextMuted, Font = NeonTheme.CreateMonoFont(10) }, 1, 3);
+
+        slidersPanel.Controls.Add(slidersLayout);
+        root.Controls.Add(slidersPanel, 0, 4);
+
+        _toolTip.SetToolTip(_simpleMasterGain, "Increase or reduce the overall volume.");
+        _toolTip.SetToolTip(_simpleShakerStrength, "Increase or reduce how strong the bass shaker is.");
+
+        var buttonsPanel = new NeonPanel { Dock = DockStyle.Top, NoiseOverlay = true, Padding = new Padding(14), AutoSize = true };
+        var buttonsRow = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, FlowDirection = FlowDirection.LeftToRight, WrapContents = true };
+        _simpleStartButton.Font = NeonTheme.CreateBaseFont(14, FontStyle.Bold);
+        _simpleStopButton.Font = NeonTheme.CreateBaseFont(14, FontStyle.Bold);
+        _simpleStartButton.Click += (_, _) => StartRouter();
+        _simpleStopButton.Click += (_, _) => StopRouter();
+
+        _simpleAdvancedToggle.Checked = _uiState.ShowAdvancedControls;
+        _simpleAdvancedToggle.CheckedChanged += (_, _) =>
+        {
+            _uiState = _uiState with { ShowAdvancedControls = _simpleAdvancedToggle.Checked, HasSeenSimpleMode = true };
+            UiStateStore.Save(_uiState);
+            RebuildTabs(showAdvanced: _uiState.ShowAdvancedControls);
+            UpdateStatusBar();
+        };
+
+        _toolTip.SetToolTip(_simpleAdvancedToggle, "Show all controls (routing matrix, per-speaker trim, calibration, profiles).");
+
+        buttonsRow.Controls.Add(_simpleStartButton);
+        buttonsRow.Controls.Add(_simpleStopButton);
+        buttonsRow.Controls.Add(new Label { Text = "   ", AutoSize = true, Padding = new Padding(0, 12, 0, 0) });
+        buttonsRow.Controls.Add(_simpleAdvancedToggle);
+        buttonsRow.Controls.Add(new Label { Text = "   ", AutoSize = true, Padding = new Padding(0, 12, 0, 0) });
+        buttonsRow.Controls.Add(_simpleStatus);
+        buttonsPanel.Controls.Add(buttonsRow);
+        root.Controls.Add(buttonsPanel, 0, 5);
+
+        var hintPanel = new Panel { Dock = DockStyle.Fill };
+        _simpleNextHint.Dock = DockStyle.Bottom;
+        hintPanel.Controls.Add(_simpleNextHint);
+        root.Controls.Add(hintPanel, 0, 6);
+
+        // Wire simple dropdowns to advanced dropdowns + update status.
+        _simpleGameSourceCombo.SelectedIndexChanged += (_, _) =>
+        {
+            if (_suppressConsoleSync) return;
+            _suppressConsoleSync = true;
+            try
+            {
+                _musicDeviceCombo.SelectedItem = _simpleGameSourceCombo.SelectedItem;
+            }
+            finally { _suppressConsoleSync = false; }
+            UpdateStatusBar();
+        };
+        _simpleSecondarySourceCombo.SelectedIndexChanged += (_, _) =>
+        {
+            if (_suppressConsoleSync) return;
+            _suppressConsoleSync = true;
+            try
+            {
+                _shakerDeviceCombo.SelectedItem = _simpleSecondarySourceCombo.SelectedItem;
+            }
+            finally { _suppressConsoleSync = false; }
+            UpdateStatusBar();
+        };
+        _simpleOutputCombo.SelectedIndexChanged += (_, _) =>
+        {
+            if (_suppressConsoleSync) return;
+            _suppressConsoleSync = true;
+            try
+            {
+                _outputDeviceCombo.SelectedItem = _simpleOutputCombo.SelectedItem;
+            }
+            finally { _suppressConsoleSync = false; }
+            UpdateStatusBar();
+        };
+
+        // Simple presets
+        _simplePresetCombo.Items.Clear();
+        _simplePresetCombo.Items.Add("🎮 Game + Bass Shaker (Recommended)");
+        _simplePresetCombo.Items.Add("🎵 Music Clean");
+        _simplePresetCombo.Items.Add("🎮 Game Only");
+        _simplePresetCombo.Items.Add("🪑 Shaker Only (No Speakers)");
+        _simplePresetCombo.Items.Add("🔧 Flat / Debug");
+        _simplePresetCombo.SelectedIndexChanged += (_, _) =>
+        {
+            if (_suppressConsoleSync) return;
+            ApplySimplePreset(_simplePresetCombo.SelectedItem as string);
+        };
+        if (_simplePresetCombo.Items.Count > 0)
+            _simplePresetCombo.SelectedIndex = 0;
+
+        page.Controls.Add(root);
+
+        // Mark that the user has seen the Simple Mode landing.
+        if (!_uiState.HasSeenSimpleMode)
+        {
+            _uiState = _uiState with { HasSeenSimpleMode = true };
+            UiStateStore.Save(_uiState);
+        }
+
+        return page;
+    }
+
+    private void ApplySimplePreset(string? presetName)
+    {
+        if (string.IsNullOrWhiteSpace(presetName))
+            return;
+
+        bool[,] matrix = new bool[6, 2];
+
+        // Rows: Front, Center, LFE, Rear, Side, Reserved. Cols: A=Game, B=Secondary.
+        if (presetName.StartsWith("🎮 Game + Bass Shaker", StringComparison.OrdinalIgnoreCase))
+        {
+            matrix[0, 0] = true; // Front from A
+            matrix[2, 0] = true; // LFE from A
+            _simplePresetSummary.Text = "Speakers: Game audio • Shaker: Game bass";
+        }
+        else if (presetName.StartsWith("🎵 Music Clean", StringComparison.OrdinalIgnoreCase))
+        {
+            matrix[0, 1] = true; // Front from B
+            _simplePresetSummary.Text = "Speakers: Music • Shaker: Off";
+        }
+        else if (presetName.StartsWith("🎮 Game Only", StringComparison.OrdinalIgnoreCase))
+        {
+            matrix[0, 0] = true; // Front from A
+            _simplePresetSummary.Text = "Speakers: Game audio • Shaker: Off";
+        }
+        else if (presetName.StartsWith("🪑 Shaker Only", StringComparison.OrdinalIgnoreCase))
+        {
+            matrix[2, 0] = true; // LFE from A
+            _simplePresetSummary.Text = "Speakers: Off • Shaker: Game bass";
+        }
+        else
+        {
+            // Flat/debug: remove matrix override, fall back to mixing mode.
+            _simplePresetSummary.Text = "No routing override (advanced controls apply)";
+
+            _suppressConsoleSync = true;
+            try
+            {
+                _consoleMatrixDirty = false;
+                _config.GroupRouting = null;
+            }
+            finally { _suppressConsoleSync = false; }
+
+            UpdateStatusBar();
+            return;
+        }
+
+        _suppressConsoleSync = true;
+        try
+        {
+            _consoleMatrixDirty = true;
+            _consoleMatrix.SetAll(matrix);
+            _config.GroupRouting = ReadMatrixToConfig();
+        }
+        finally { _suppressConsoleSync = false; }
+
+        UpdateStatusBar();
     }
 
     private Control BuildConsoleInputsPanel()
@@ -815,13 +1155,13 @@ public sealed class RouterMainForm : Form
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 180));
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
 
-        layout.Controls.Add(new Label { Text = "Music input device", AutoSize = true }, 0, 0);
+        layout.Controls.Add(new Label { Text = "Game audio source", AutoSize = true }, 0, 0);
         layout.Controls.Add(_musicDeviceCombo, 1, 0);
 
-        layout.Controls.Add(new Label { Text = "Shaker input device", AutoSize = true }, 0, 1);
+        layout.Controls.Add(new Label { Text = "Music / secondary source", AutoSize = true }, 0, 1);
         layout.Controls.Add(_shakerDeviceCombo, 1, 1);
 
-        layout.Controls.Add(new Label { Text = "Output device (CM6206)", AutoSize = true }, 0, 2);
+        layout.Controls.Add(new Label { Text = "Output device", AutoSize = true }, 0, 2);
         layout.Controls.Add(_outputDeviceCombo, 1, 2);
 
         layout.Controls.Add(new Label { Text = "Latency input (mic/line-in)", AutoSize = true }, 0, 3);
@@ -2179,24 +2519,37 @@ public sealed class RouterMainForm : Form
         using var enumerator = new MMDeviceEnumerator();
         var devices = enumerator.EnumerateAudioEndPoints(DataFlow.Render, DeviceState.Active)
             .Select(d => d.FriendlyName)
+            .Where(s => !string.IsNullOrWhiteSpace(s))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
+
+        // Add friendly "default" choice for Simple Mode (works anywhere a render device name is accepted).
+        if (!devices.Contains(DeviceHelper.DefaultSystemRenderDevice))
+            devices.Insert(0, DeviceHelper.DefaultSystemRenderDevice);
 
         var captureDevices = enumerator.EnumerateAudioEndPoints(DataFlow.Capture, DeviceState.Active)
             .Select(d => d.FriendlyName)
             .ToList();
 
-        void SetItems(ComboBox combo)
+        void SetItems(ComboBox combo, bool allowNone)
         {
             var selected = combo.SelectedItem as string;
             combo.Items.Clear();
+            if (allowNone)
+                combo.Items.Add(DeviceHelper.NoneDevice);
             foreach (var name in devices) combo.Items.Add(name);
             if (!string.IsNullOrWhiteSpace(selected) && combo.Items.Contains(selected))
                 combo.SelectedItem = selected;
         }
 
-        SetItems(_musicDeviceCombo);
-        SetItems(_shakerDeviceCombo);
-        SetItems(_outputDeviceCombo);
+        SetItems(_musicDeviceCombo, allowNone: false);
+        SetItems(_shakerDeviceCombo, allowNone: true);
+        SetItems(_outputDeviceCombo, allowNone: false);
+
+        // Simple Mode dropdowns
+        SetItems(_simpleGameSourceCombo, allowNone: false);
+        SetItems(_simpleSecondarySourceCombo, allowNone: true);
+        SetItems(_simpleOutputCombo, allowNone: false);
 
         // capture list
         {
@@ -2213,12 +2566,31 @@ public sealed class RouterMainForm : Form
         SelectIfPresent(_musicDeviceCombo, _config.MusicInputRenderDevice);
         SelectIfPresent(_shakerDeviceCombo, _config.ShakerInputRenderDevice);
         SelectIfPresent(_outputDeviceCombo, _config.OutputRenderDevice);
+
+        SelectIfPresent(_simpleGameSourceCombo, _config.MusicInputRenderDevice);
+        // Secondary source may be empty; if so, leave at (None) if present.
+        if (string.IsNullOrWhiteSpace(_config.ShakerInputRenderDevice))
+            _simpleSecondarySourceCombo.SelectedItem = DeviceHelper.NoneDevice;
+        else
+            SelectIfPresent(_simpleSecondarySourceCombo, _config.ShakerInputRenderDevice);
+        SelectIfPresent(_simpleOutputCombo, _config.OutputRenderDevice);
         if (!string.IsNullOrWhiteSpace(_config.LatencyInputCaptureDevice))
             SelectIfPresent(_latencyInputCombo, _config.LatencyInputCaptureDevice);
 
         _musicGainDb.Value = (decimal)_config.MusicGainDb;
         _shakerGainDb.Value = (decimal)_config.ShakerGainDb;
         _masterGainDb.Value = (decimal)_config.MasterGainDb;
+
+        _suppressConsoleSync = true;
+        try
+        {
+            _simpleMasterGain.Value = (int)Math.Round(_config.MasterGainDb * 10.0);
+            _simpleMasterGainLabel.Text = $"{_config.MasterGainDb:0.0} dB";
+
+            _simpleShakerStrength.Value = (int)Math.Round(_config.LfeGainDb * 10.0);
+            _simpleShakerStrengthLabel.Text = $"{_config.LfeGainDb:0.0} dB";
+        }
+        finally { _suppressConsoleSync = false; }
 
         _hpHz.Value = (decimal)_config.ShakerHighPassHz;
         _lpHz.Value = (decimal)_config.ShakerLowPassHz;
@@ -2354,13 +2726,21 @@ public sealed class RouterMainForm : Form
     private void SaveConfigFromControls(bool showSavedDialog = true)
     {
         _config.MusicInputRenderDevice = _musicDeviceCombo.SelectedItem as string ?? _config.MusicInputRenderDevice;
-        _config.ShakerInputRenderDevice = _shakerDeviceCombo.SelectedItem as string ?? _config.ShakerInputRenderDevice;
+        {
+            var secondary = _shakerDeviceCombo.SelectedItem as string;
+            _config.ShakerInputRenderDevice = string.Equals(secondary, DeviceHelper.NoneDevice, StringComparison.OrdinalIgnoreCase)
+                ? string.Empty
+                : (secondary ?? _config.ShakerInputRenderDevice);
+        }
         _config.OutputRenderDevice = _outputDeviceCombo.SelectedItem as string ?? _config.OutputRenderDevice;
         _config.LatencyInputCaptureDevice = _latencyInputCombo.SelectedItem as string ?? _config.LatencyInputCaptureDevice;
 
         _config.MusicGainDb = (float)_musicGainDb.Value;
         _config.ShakerGainDb = (float)_shakerGainDb.Value;
         _config.MasterGainDb = (float)_masterGainDb.Value;
+
+        // Simple Mode "Bass shaker strength" is LFE gain in dB.
+        _config.LfeGainDb = _simpleShakerStrength.Value / 10.0f;
 
         _config.MusicHighPassHz = _musicHpEnable.Checked ? (float)_musicHpHz.Value : null;
         _config.MusicLowPassHz = _musicLpEnable.Checked ? (float)_musicLpHz.Value : null;
@@ -2475,6 +2855,95 @@ public sealed class RouterMainForm : Form
         var mode = _useExclusiveMode.Checked ? "Exclusive" : "Shared";
         var sr = running ? _router!.EffectiveSampleRate : GetSelectedSampleRate();
         var preset = _profileCombo.SelectedItem as string;
+
+        var gamePeak = Math.Max(_displayMusic[0], _displayMusic[1]);
+        var secondaryPeak = Math.Max(_displayShaker[0], _displayShaker[1]);
+        var gameDetected = running && gamePeak > 0.0015f;
+        var secondaryDetected = running && secondaryPeak > 0.0015f;
+
+        var outputSelected = !string.IsNullOrWhiteSpace(outDev);
+        var outputOk = true;
+        if (outputSelected)
+        {
+            var now = DateTime.UtcNow;
+            if ((now - _lastOutputCheckUtc).TotalMilliseconds > 1000)
+            {
+                _lastOutputCheckUtc = now;
+                try
+                {
+                    // Best-effort: validate selection still exists.
+                    using var _ = DeviceHelper.GetRenderDeviceByFriendlyName(outDev!);
+                    _cachedOutputOk = true;
+                }
+                catch
+                {
+                    _cachedOutputOk = false;
+                }
+            }
+            outputOk = _cachedOutputOk;
+        }
+
+        var speakersEnabled = true;
+        var shakerEnabled = true;
+        if (_config.GroupRouting is { Length: 12 } gr)
+        {
+            // Front row (0) and LFE row (2)
+            speakersEnabled = gr[0] || gr[1];
+            shakerEnabled = gr[2 * 2] || gr[2 * 2 + 1];
+        }
+
+        var cOk = ColorTranslator.FromHtml("#00E676");
+        var cWarn = ColorTranslator.FromHtml("#FFB000");
+        var cErr = ColorTranslator.FromHtml("#FF3B3B");
+
+        string healthText;
+        Color healthColor;
+
+        if (!outputSelected)
+        {
+            healthText = "❌ Select an output device";
+            healthColor = cErr;
+        }
+        else if (!outputOk)
+        {
+            healthText = "❌ Output device disconnected";
+            healthColor = cErr;
+        }
+        else if (!string.IsNullOrWhiteSpace(_lastStartError) && !running)
+        {
+            healthText = $"❌ {_lastStartError}";
+            healthColor = cErr;
+        }
+        else if (!running)
+        {
+            healthText = "Ready: select devices, pick a preset, press Start";
+            healthColor = NeonTheme.TextMuted;
+        }
+        else if (!gameDetected)
+        {
+            healthText = "⚠ Routing active – no audio from Game Source";
+            healthColor = cWarn;
+        }
+        else
+        {
+            healthText = "✅ Routing active – audio detected";
+            healthColor = cOk;
+        }
+
+        _statusHealth.Text = healthText;
+        _statusHealth.ForeColor = healthColor;
+
+        _simpleStatus.Text = healthText;
+        _simpleStatus.ForeColor = healthColor;
+
+        _simpleFlow.RouterRunning = running;
+        _simpleFlow.OutputOk = outputSelected && outputOk;
+        _simpleFlow.GameAudioDetected = gameDetected;
+        _simpleFlow.SecondaryAudioDetected = secondaryDetected;
+        _simpleFlow.SpeakersEnabled = speakersEnabled;
+        _simpleFlow.ShakerEnabled = shakerEnabled;
+        _simpleFlow.OutputDeviceDisplay = string.IsNullOrWhiteSpace(outDev) ? "Output" : outDev!;
+        _simpleFlow.Invalidate();
 
         _statusRouter.Text = running ? "Router: Running" : "Router: Stopped";
         _statusFormat.Text = $"Output: {(string.IsNullOrWhiteSpace(outDev) ? "(not selected)" : outDev)} | {sr} Hz | {mode}";
@@ -2664,6 +3133,7 @@ public sealed class RouterMainForm : Form
 
         try
         {
+            _lastStartError = null;
             SaveConfigFromControls(showSavedDialog: false);
             _config = RouterConfig.Load(_configPath);
             _router = new WasapiDualRouter(_config);
@@ -2680,12 +3150,18 @@ public sealed class RouterMainForm : Form
             _startButton.Enabled = false;
             _stopButton.Enabled = true;
 
+            _simpleStartButton.Enabled = false;
+            _simpleStopButton.Enabled = true;
+
             UpdateDiagnostics();
+            UpdateStatusBar();
         }
         catch (Exception ex)
         {
+            _lastStartError = ex.Message;
             StopRouter();
             MessageBox.Show(this, ex.Message, "Failed to start", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            UpdateStatusBar();
         }
     }
 
@@ -2709,7 +3185,11 @@ public sealed class RouterMainForm : Form
             _startButton.Enabled = true;
             _stopButton.Enabled = false;
 
+            _simpleStartButton.Enabled = true;
+            _simpleStopButton.Enabled = false;
+
             UpdateDiagnostics();
+            UpdateStatusBar();
         }
     }
 

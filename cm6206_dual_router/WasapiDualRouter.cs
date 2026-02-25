@@ -13,14 +13,14 @@ public sealed class WasapiDualRouter : IDisposable
     public string? FormatWarning { get; }
 
     private readonly MMDevice _musicDevice;
-    private readonly MMDevice _shakerDevice;
+    private readonly MMDevice? _shakerDevice;
     private readonly MMDevice _outputDevice;
 
     private readonly WasapiLoopbackCapture _musicCapture;
-    private readonly WasapiLoopbackCapture _shakerCapture;
+    private readonly WasapiLoopbackCapture? _shakerCapture;
 
     private readonly BufferedWaveProvider _musicBuffer;
-    private readonly BufferedWaveProvider _shakerBuffer;
+    private readonly BufferedWaveProvider? _shakerBuffer;
 
     private readonly WasapiOut _output;
     private readonly ManualResetEventSlim _stopped = new(false);
@@ -39,7 +39,8 @@ public sealed class WasapiDualRouter : IDisposable
         _config = config;
 
         _musicDevice = DeviceHelper.GetRenderDeviceByFriendlyName(config.MusicInputRenderDevice);
-        _shakerDevice = DeviceHelper.GetRenderDeviceByFriendlyName(config.ShakerInputRenderDevice);
+        if (!string.IsNullOrWhiteSpace(config.ShakerInputRenderDevice))
+            _shakerDevice = DeviceHelper.GetRenderDeviceByFriendlyName(config.ShakerInputRenderDevice);
         _outputDevice = DeviceHelper.GetRenderDeviceByFriendlyName(config.OutputRenderDevice);
 
         // Negotiate effective format (shared uses mix format; exclusive can fall back).
@@ -48,7 +49,8 @@ public sealed class WasapiDualRouter : IDisposable
         FormatWarning = negotiation.Warning;
 
         _musicCapture = new WasapiLoopbackCapture(_musicDevice);
-        _shakerCapture = new WasapiLoopbackCapture(_shakerDevice);
+        if (_shakerDevice is not null)
+            _shakerCapture = new WasapiLoopbackCapture(_shakerDevice);
 
         _musicBuffer = new BufferedWaveProvider(_musicCapture.WaveFormat)
         {
@@ -56,11 +58,14 @@ public sealed class WasapiDualRouter : IDisposable
             BufferDuration = TimeSpan.FromSeconds(2)
         };
 
-        _shakerBuffer = new BufferedWaveProvider(_shakerCapture.WaveFormat)
+        if (_shakerCapture is not null)
         {
-            DiscardOnBufferOverflow = true,
-            BufferDuration = TimeSpan.FromSeconds(2)
-        };
+            _shakerBuffer = new BufferedWaveProvider(_shakerCapture.WaveFormat)
+            {
+                DiscardOnBufferOverflow = true,
+                BufferDuration = TimeSpan.FromSeconds(2)
+            };
+        }
 
         _musicCapture.DataAvailable += (_, e) =>
         {
@@ -68,20 +73,33 @@ public sealed class WasapiDualRouter : IDisposable
             _musicBuffer.AddSamples(e.Buffer, 0, e.BytesRecorded);
         };
 
-        _shakerCapture.DataAvailable += (_, e) =>
+        if (_shakerCapture is not null && _shakerBuffer is not null)
         {
-            if (Volatile.Read(ref _stopRequested) != 0) return;
-            _shakerBuffer.AddSamples(e.Buffer, 0, e.BytesRecorded);
-        };
+            _shakerCapture.DataAvailable += (_, e) =>
+            {
+                if (Volatile.Read(ref _stopRequested) != 0) return;
+                _shakerBuffer.AddSamples(e.Buffer, 0, e.BytesRecorded);
+            };
+        }
 
         _musicCapture.RecordingStopped += (_, __) => Stop();
-        _shakerCapture.RecordingStopped += (_, __) => Stop();
+        if (_shakerCapture is not null)
+            _shakerCapture.RecordingStopped += (_, __) => Stop();
 
         var outputFormat = WaveFormatFactory.Create7Point1Float(_config.SampleRate);
 
         // Build per-input pipelines
         var musicStereo = BuildStereoProvider(_musicBuffer.ToSampleProvider(), _config.SampleRate);
-        var shakerStereo = BuildStereoProvider(_shakerBuffer.ToSampleProvider(), _config.SampleRate);
+        ISampleProvider shakerStereo;
+        if (_shakerBuffer is not null)
+        {
+            shakerStereo = BuildStereoProvider(_shakerBuffer.ToSampleProvider(), _config.SampleRate);
+        }
+        else
+        {
+            // Secondary input disabled: feed silence, keep predictable routing.
+            shakerStereo = new SilenceProvider(musicStereo.WaveFormat).ToSampleProvider();
+        }
 
         var samplesPerNotification = Math.Max(256, _config.SampleRate / 20); // ~20Hz updates
 
@@ -135,7 +153,7 @@ public sealed class WasapiDualRouter : IDisposable
     {
         _stopped.Reset();
         _musicCapture.StartRecording();
-        _shakerCapture.StartRecording();
+        _shakerCapture?.StartRecording();
         _output.Play();
     }
 
@@ -146,7 +164,7 @@ public sealed class WasapiDualRouter : IDisposable
 
         try { _output.Stop(); } catch { /* ignore */ }
         try { _musicCapture.StopRecording(); } catch { /* ignore */ }
-        try { _shakerCapture.StopRecording(); } catch { /* ignore */ }
+        try { _shakerCapture?.StopRecording(); } catch { /* ignore */ }
 
         _stopped.Set();
     }
@@ -158,9 +176,9 @@ public sealed class WasapiDualRouter : IDisposable
         Stop();
         _output.Dispose();
         _musicCapture.Dispose();
-        _shakerCapture.Dispose();
+        _shakerCapture?.Dispose();
         _musicDevice.Dispose();
-        _shakerDevice.Dispose();
+        _shakerDevice?.Dispose();
         _outputDevice.Dispose();
         _stopped.Dispose();
     }
