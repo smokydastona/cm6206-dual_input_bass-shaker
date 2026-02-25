@@ -35,3 +35,14 @@ This repo is a **.NET 8 Windows audio app** that uses **NAudio + WASAPI**.
   - `git push`
 - If `git push` can’t run (no remote / no auth), clearly say so and stop after committing.
 
+### CI terminology: “push” vs “tag and push”
+This repo has two GitHub Actions workflows:
+- **Push builds** (`.github/workflows/build-windows.yml`): triggered by `git push` to `main` and PRs. Produces build artifacts but does **not** create a GitHub Release.
+- **Tag releases** (`.github/workflows/release-windows.yml`): triggered only when a version tag is pushed (e.g. `v1.2.3`). Builds + packages a versioned ZIP and creates a GitHub **Release**.
+
+When the user says:
+- **“push”**: do the normal `git push` (no tagging). This is for day-to-day commits and CI build artifacts.
+- **“tag and push”**: create a version tag and push it so a Release is created:
+  - `git tag v<major>.<minor>.<patch>`
+  - `git push origin v<major>.<minor>.<patch>`
+
