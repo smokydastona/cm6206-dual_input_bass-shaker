@@ -6,6 +6,7 @@ on:
 
 permissions:
   contents: write
+  id-token: write
 
 jobs:
   release:
@@ -38,6 +39,9 @@ jobs:
           }
           if (-not (Test-Path -LiteralPath $iscc)) { throw "ISCC.exe not found: $iscc" }
           Get-Item -LiteralPath $iscc | Select-Object FullName, Length, LastWriteTime | Format-List
+
+      - name: Setup cosign (Sigstore)
+        uses: sigstore/cosign-installer@v3
 
       - name: Compute version (from tag)
         shell: pwsh
@@ -190,6 +194,33 @@ jobs:
           Compress-Archive -Path (Join-Path $src '*') -DestinationPath $zipPath
           Write-Host "Created: $zipPath"
 
+      - name: Cosign release assets (keyless)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          $outDir = Join-Path $PWD 'artifacts/cosign'
+          New-Item -ItemType Directory -Force -Path $outDir | Out-Null
+
+          $exe = Join-Path $PWD 'artifacts/cm6206_dual_router_win-x64/Cm6206DualRouter.exe'
+          $zip = Join-Path $PWD ("artifacts/cm6206_dual_router_win-x64_{0}.zip" -f $env:APP_VERSION)
+          $setup = Join-Path $PWD ("artifacts/installer/Cm6206DualRouterSetup_{0}.exe" -f $env:APP_VERSION)
+
+          foreach ($f in @($exe, $zip, $setup)) {
+            if (-not (Test-Path -LiteralPath $f)) { throw "Expected file not found: $f" }
+          }
+
+          # Keyless signing uses GitHub OIDC; requires workflow permission: id-token: write
+          cosign sign-blob --yes --output-signature (Join-Path $outDir 'Cm6206DualRouter.exe.sig') --output-certificate (Join-Path $outDir 'Cm6206DualRouter.exe.crt') $exe
+          cosign sign-blob --yes --output-signature (Join-Path $outDir ("cm6206_dual_router_win-x64_{0}.zip.sig" -f $env:APP_VERSION)) --output-certificate (Join-Path $outDir ("cm6206_dual_router_win-x64_{0}.zip.crt" -f $env:APP_VERSION)) $zip
+          cosign sign-blob --yes --output-signature (Join-Path $outDir ("Cm6206DualRouterSetup_{0}.exe.sig" -f $env:APP_VERSION)) --output-certificate (Join-Path $outDir ("Cm6206DualRouterSetup_{0}.exe.crt" -f $env:APP_VERSION)) $setup
+
+      - name: Upload artifact (cosign)
+        uses: actions/upload-artifact@v4
+        with:
+          name: cosign_${{ env.APP_VERSION }}
+          path: artifacts/cosign/
+
       - name: Upload artifact (zip)
         uses: actions/upload-artifact@v4
         with:
@@ -208,4 +239,10 @@ jobs:
           files: |
             artifacts/cm6206_dual_router_win-x64_${{ env.APP_VERSION }}.zip
             artifacts/installer/Cm6206DualRouterSetup_${{ env.APP_VERSION }}.exe
+            artifacts/cosign/Cm6206DualRouter.exe.sig
+            artifacts/cosign/Cm6206DualRouter.exe.crt
+            artifacts/cosign/cm6206_dual_router_win-x64_${{ env.APP_VERSION }}.zip.sig
+            artifacts/cosign/cm6206_dual_router_win-x64_${{ env.APP_VERSION }}.zip.crt
+            artifacts/cosign/Cm6206DualRouterSetup_${{ env.APP_VERSION }}.exe.sig
+            artifacts/cosign/Cm6206DualRouterSetup_${{ env.APP_VERSION }}.exe.crt
           generate_release_notes: true

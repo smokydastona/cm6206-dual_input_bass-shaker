@@ -99,6 +99,14 @@ Create a release:
 To sign locally (requires Windows SDK SignTool):
 - `pwsh scripts/sign.ps1 -File .\Cm6206DualRouter.exe -PfxPath .\yourcert.pfx -PfxCredential (New-Object PSCredential('pfx', (ConvertTo-SecureString '...' -AsPlainText -Force)))`
 
+### Sigstore / cosign (provenance signatures)
+This repo also publishes **Sigstore/cosign keyless** signatures for release artifacts (EXE/ZIP/installer). This helps users verify the file came from the tagged GitHub Actions release build.
+
+Note: cosign signatures do **not** replace Authenticode for Windows SmartScreen/UAC “Publisher” trust.
+
+Verify example (adjust filenames/version):
+- `cosign verify-blob --signature .\Cm6206DualRouter.exe.sig --certificate .\Cm6206DualRouter.exe.crt --certificate-oidc-issuer https://token.actions.githubusercontent.com --certificate-identity-regexp "^https://github.com/smokydastona/cm6206-dual_input_bass-shaker/.github/workflows/release-windows.yml@refs/tags/v.*$" .\Cm6206DualRouter.exe`
+
 ## Local build (optional)
 - Install **.NET 8 SDK (x64)**: https://dotnet.microsoft.com/download/dotnet/8.0
 
