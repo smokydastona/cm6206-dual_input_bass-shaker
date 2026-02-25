@@ -20,6 +20,13 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Content Include="..\docs\ai_copilot\**\*.md"
+             Link="docs\ai_copilot\%(RecursiveDir)%(Filename)%(Extension)"
+             CopyToOutputDirectory="PreserveNewest"
+             CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <None Include="default_profiles\**\*.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>
