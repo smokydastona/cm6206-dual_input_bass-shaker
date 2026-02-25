@@ -79,6 +79,14 @@ public sealed class RouterMainForm : Form
     private readonly Button _diagnosticsOpenClassicSoundButton = new() { Text = "Open Sound control panel" };
     private readonly Button _diagnosticsLaunchVendorButton = new() { Text = "Launch C-Media control panel" };
     private readonly Label _diagnosticsVendorStatusLabel = new() { Text = "", AutoSize = true };
+
+    private readonly Button _cm6206HidScanButton = new() { Text = "Scan CM6206 HID" };
+    private readonly ComboBox _cm6206HidDeviceCombo = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 360 };
+    private readonly NumericUpDown _cm6206HidRegCount = new() { Minimum = 1, Maximum = 64, DecimalPlaces = 0, Increment = 1, Value = 6, Width = 60 };
+    private readonly Button _cm6206HidReadRegsButton = new() { Text = "Read regs" };
+    private readonly Label _cm6206HidStatusLabel = new() { Text = "", AutoSize = true };
+
+    private string? _cm6206HidLastDump;
     private readonly TextBox _diagnosticsText = new()
     {
         Multiline = true,
@@ -450,6 +458,14 @@ public sealed class RouterMainForm : Form
         buttons.Controls.Add(_diagnosticsLaunchVendorButton);
         buttons.Controls.Add(_diagnosticsVendorStatusLabel);
 
+        buttons.Controls.Add(new Label { Text = "   ", AutoSize = true });
+        buttons.Controls.Add(_cm6206HidScanButton);
+        buttons.Controls.Add(_cm6206HidDeviceCombo);
+        buttons.Controls.Add(new Label { Text = "Regs:", AutoSize = true, TextAlign = ContentAlignment.MiddleCenter, Padding = new Padding(0, 6, 0, 0) });
+        buttons.Controls.Add(_cm6206HidRegCount);
+        buttons.Controls.Add(_cm6206HidReadRegsButton);
+        buttons.Controls.Add(_cm6206HidStatusLabel);
+
         _diagnosticsRefreshButton.Click += (_, _) => UpdateDiagnostics();
         _diagnosticsOpenSoundSettingsButton.Click += (_, _) =>
             Process.Start(new ProcessStartInfo("ms-settings:sound") { UseShellExecute = true });
@@ -466,6 +482,82 @@ public sealed class RouterMainForm : Form
 
             MessageBox.Show(this, message, "Control panel not found", MessageBoxButtons.OK, MessageBoxIcon.Information);
             _diagnosticsVendorStatusLabel.Text = message;
+        };
+
+        _cm6206HidScanButton.Click += (_, _) =>
+        {
+            try
+            {
+                _cm6206HidLastDump = null;
+                _cm6206HidStatusLabel.Text = "";
+
+                var devices = Cm6206HidClient.EnumerateDevices();
+                _cm6206HidDeviceCombo.BeginUpdate();
+                _cm6206HidDeviceCombo.Items.Clear();
+                _cm6206HidDeviceCombo.DisplayMember = nameof(HidComboItem.Display);
+                _cm6206HidDeviceCombo.ValueMember = nameof(HidComboItem.DevicePath);
+                foreach (var d in devices)
+                {
+                    var display = $"{(string.IsNullOrWhiteSpace(d.Product) ? "CM6206" : d.Product)}";
+                    if (!string.IsNullOrWhiteSpace(d.SerialNumber))
+                        display += $" SN={d.SerialNumber}";
+                    _cm6206HidDeviceCombo.Items.Add(new HidComboItem(display, d.DevicePath));
+                }
+                _cm6206HidDeviceCombo.EndUpdate();
+
+                if (_cm6206HidDeviceCombo.Items.Count > 0)
+                    _cm6206HidDeviceCombo.SelectedIndex = 0;
+
+                _cm6206HidStatusLabel.Text = $"Found: {_cm6206HidDeviceCombo.Items.Count}";
+                UpdateDiagnostics();
+            }
+            catch (Exception ex)
+            {
+                _cm6206HidStatusLabel.Text = $"Error: {ex.Message}";
+                _cm6206HidLastDump = null;
+                UpdateDiagnostics();
+            }
+        };
+
+        _cm6206HidReadRegsButton.Click += async (_, _) =>
+        {
+            if (_cm6206HidDeviceCombo.SelectedItem is not HidComboItem selected)
+            {
+                _cm6206HidStatusLabel.Text = "Select a HID device";
+                return;
+            }
+
+            _cm6206HidReadRegsButton.Enabled = false;
+            _cm6206HidStatusLabel.Text = "Reading...";
+
+            try
+            {
+                var count = (int)_cm6206HidRegCount.Value;
+                var regs = await Task.Run(() => Cm6206HidClient.ReadRegisterBlock(selected.DevicePath, count));
+
+                var sb = new StringBuilder();
+                sb.AppendLine($"Device: {selected.Display}");
+                sb.AppendLine($"VID:PID = {Cm6206HidClient.VendorId:X4}:{Cm6206HidClient.ProductId:X4}");
+                sb.AppendLine($"Registers (read-only):");
+                foreach (var kvp in regs.OrderBy(k => k.Key))
+                {
+                    sb.AppendLine($"  R{kvp.Key:D2} = 0x{kvp.Value:X4} ({kvp.Value})");
+                }
+
+                _cm6206HidLastDump = sb.ToString().TrimEnd();
+                _cm6206HidStatusLabel.Text = "OK";
+                UpdateDiagnostics();
+            }
+            catch (Exception ex)
+            {
+                _cm6206HidLastDump = $"HID read failed: {ex.Message}";
+                _cm6206HidStatusLabel.Text = "Failed";
+                UpdateDiagnostics();
+            }
+            finally
+            {
+                _cm6206HidReadRegsButton.Enabled = true;
+            }
         };
 
         layout.Controls.Add(buttons, 0, 0);
@@ -500,8 +592,36 @@ public sealed class RouterMainForm : Form
         else
             sb.AppendLine($"Not found: {reason}");
 
+        sb.AppendLine();
+        sb.AppendLine("CM6206 HID probe (read-only):");
+        sb.AppendLine($"Target VID:PID = {Cm6206HidClient.VendorId:X4}:{Cm6206HidClient.ProductId:X4}");
+        if (_cm6206HidDeviceCombo.Items.Count == 0)
+        {
+            sb.AppendLine("Devices: (scan not run yet, or none found)");
+        }
+        else
+        {
+            sb.AppendLine($"Devices: {_cm6206HidDeviceCombo.Items.Count}");
+            for (var i = 0; i < _cm6206HidDeviceCombo.Items.Count; i++)
+            {
+                if (_cm6206HidDeviceCombo.Items[i] is HidComboItem item)
+                {
+                    var marker = i == _cm6206HidDeviceCombo.SelectedIndex ? "*" : " ";
+                    sb.AppendLine($"{marker} {item.Display}");
+                }
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(_cm6206HidLastDump))
+        {
+            sb.AppendLine();
+            sb.AppendLine(_cm6206HidLastDump);
+        }
+
         _diagnosticsText.Text = sb.ToString();
     }
+
+    private sealed record HidComboItem(string Display, string DevicePath);
 
     private static string DescribeRenderDevice(string? friendlyName, string label)
     {
