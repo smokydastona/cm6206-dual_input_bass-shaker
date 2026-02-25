@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: read
+  id-token: write
 
 jobs:
   build:
@@ -82,6 +83,9 @@ jobs:
           }
           if (-not (Test-Path -LiteralPath $iscc)) { throw "ISCC.exe not found: $iscc" }
           Get-Item -LiteralPath $iscc | Select-Object FullName, Length, LastWriteTime | Format-List
+
+      - name: Setup cosign (Sigstore)
+        uses: sigstore/cosign-installer@v3
 
       - name: Restore
         run: dotnet restore "cm6206_dual_router/Cm6206DualRouter.csproj"
@@ -189,15 +193,72 @@ jobs:
           $setupExe = Join-Path $PWD "artifacts/installer/Cm6206DualRouterSetup_$($env:APP_VERSION).exe"
           if (-not (Test-Path -LiteralPath $setupExe)) { throw "Installer output not found: $setupExe" }
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: cm6206_dual_router_win-x64_${{ env.APP_VERSION }}
-          path: artifacts/cm6206_dual_router_win-x64/
+      - name: Cosign artifacts (keyless, best-effort)
+        if: github.event_name != 'pull_request'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
 
-      - name: Upload artifact (installer)
+          $outDir = Join-Path $PWD 'artifacts/cosign'
+          New-Item -ItemType Directory -Force -Path $outDir | Out-Null
+
+          $exe = Join-Path $PWD 'artifacts/cm6206_dual_router_win-x64/Cm6206DualRouter.exe'
+          $setup = Join-Path $PWD ("artifacts/installer/Cm6206DualRouterSetup_{0}.exe" -f $env:APP_VERSION)
+
+          foreach ($f in @($exe, $setup)) {
+            if (-not (Test-Path -LiteralPath $f)) { throw "Expected file not found: $f" }
+          }
+
+          try {
+            cosign sign-blob --yes --output-signature (Join-Path $outDir 'Cm6206DualRouter.exe.sig') --output-certificate (Join-Path $outDir 'Cm6206DualRouter.exe.crt') $exe
+            cosign sign-blob --yes --output-signature (Join-Path $outDir ("Cm6206DualRouterSetup_{0}.exe.sig" -f $env:APP_VERSION)) --output-certificate (Join-Path $outDir ("Cm6206DualRouterSetup_{0}.exe.crt" -f $env:APP_VERSION)) $setup
+          }
+          catch {
+            Write-Warning "cosign signing failed (continuing without signatures): $($_.Exception.Message)"
+          }
+
+      - name: Create bundle ZIP
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          $stage = Join-Path $PWD 'artifacts/bundle_staging'
+          if (Test-Path -LiteralPath $stage) { Remove-Item -LiteralPath $stage -Recurse -Force }
+          New-Item -ItemType Directory -Force -Path $stage | Out-Null
+
+          $portableSrc = Join-Path $PWD 'artifacts/cm6206_dual_router_win-x64'
+          $portableDst = Join-Path $stage 'portable'
+          Copy-Item -LiteralPath $portableSrc -Destination $portableDst -Recurse -Force
+
+          $installerDir = Join-Path $stage 'installer'
+          New-Item -ItemType Directory -Force -Path $installerDir | Out-Null
+          $setupExe = Join-Path $PWD ("artifacts/installer/Cm6206DualRouterSetup_{0}.exe" -f $env:APP_VERSION)
+          Copy-Item -LiteralPath $setupExe -Destination $installerDir -Force
+
+          $cosignSrc = Join-Path $PWD 'artifacts/cosign'
+          if (Test-Path -LiteralPath $cosignSrc) {
+            Copy-Item -LiteralPath $cosignSrc -Destination (Join-Path $stage 'cosign') -Recurse -Force
+          }
+
+          Copy-Item -LiteralPath (Join-Path $PWD 'cm6206_dual_router/router.json') -Destination (Join-Path $stage 'router.json') -Force
+
+          @"
+          CM6206 Dual Router (bundle)
+
+          - portable\\ : run Cm6206DualRouter.exe (no install)
+          - installer\\: optional Inno Setup installer EXE
+          - cosign\\   : (if present) Sigstore/cosign signatures (.sig/.crt)
+          - router.json : sample config
+          "@ | Out-File -FilePath (Join-Path $stage 'README.txt') -Encoding utf8
+
+          $bundle = Join-Path $PWD ("artifacts/cm6206_dual_router_bundle_{0}.zip" -f $env:APP_VERSION)
+          if (Test-Path -LiteralPath $bundle) { Remove-Item -LiteralPath $bundle -Force }
+          Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $bundle
+          Write-Host "Created bundle: $bundle"
+
+      - name: Upload artifact (bundle)
         uses: actions/upload-artifact@v4
         with:
-          name: cm6206_dual_router_setup_${{ env.APP_VERSION }}
-          path: artifacts/installer/Cm6206DualRouterSetup_${{ env.APP_VERSION }}.exe
+          name: cm6206_dual_router_bundle_${{ env.APP_VERSION }}
+          path: artifacts/cm6206_dual_router_bundle_${{ env.APP_VERSION }}.zip
 

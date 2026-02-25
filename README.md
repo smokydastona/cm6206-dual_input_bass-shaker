@@ -35,15 +35,14 @@ Common setup:
 
 ## Prebuilt EXE (GitHub Actions)
 - This repo publishes a self-contained `win-x64` single-file build.
-- On GitHub: **Actions** → latest **build-windows** → download artifact `cm6206_dual_router_win-x64`.
+- On GitHub: **Actions** → latest **build-windows** → download artifact `cm6206_dual_router_bundle_<version>.zip`.
 
 ## Installer (recommended)
 If you want a normal Windows installer (Start menu shortcut, optional desktop icon) and an optional step to install the CM6206 driver, use the Inno Setup installer.
 
 ### Download (from GitHub Releases)
-- Tag releases include both:
-	- a portable ZIP (`cm6206_dual_router_win-x64_<version>.zip`)
-	- an installer EXE (`Cm6206DualRouterSetup_<version>.exe`)
+- Tag releases include one bundle ZIP:
+	- `cm6206_dual_router_bundle_<version>.zip` (portable app + installer + cosign signatures + sample config)
 
 ### What the installer does
 - Installs the app into `Program Files`.
@@ -67,6 +66,7 @@ Command:
 Outputs:
 - Published app: `artifacts/cm6206_dual_router_win-x64/`
 - Installer: `artifacts/installer/Cm6206DualRouterSetup_1.2.3.exe`
+- (Optional) Bundle ZIP: `artifacts/cm6206_dual_router_bundle_1.2.3.zip`
 
 ### Code signing / “Publisher”
 Windows shows a real **Publisher** in UAC/SmartScreen only when the EXE is **code-signed**.

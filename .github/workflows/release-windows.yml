@@ -16,6 +16,7 @@ jobs:
       # Set to placeholders so YAML tooling understands these exist.
       # Real values are set at runtime by the "Compute version" step via GITHUB_ENV.
       APP_VERSION: "0.0.0"
+      BUNDLE_VERSION: "0.0.0"
       ASSEMBLY_VERSION: "0.0.0.0"
       FILE_VERSION: "0.0.0.0"
       INFORMATIONAL_VERSION: "0.0.0+local"
@@ -53,12 +54,14 @@ jobs:
           if ($refType -ne 'tag') { throw "Expected tag ref, got: $refType / $refName" }
           if (-not $refName.StartsWith('v')) { throw "Tag must start with 'v' (example: v1.2.3). Got: $refName" }
 
-          $tagVersion = $refName.Substring(1)
-          if ($tagVersion -notmatch '^\d+\.\d+\.\d+(\.\d+)?$') {
-            throw "Tag '$refName' must be v<major>.<minor>.<patch>[.<revision>]"
+          # Allow optional suffixes like v0.0.1-hotfix1.
+          $bundleVersion = $refName.Substring(1)
+          if ($bundleVersion -notmatch '^\d+\.\d+\.\d+(\.\d+)?([\-][0-9A-Za-z\.\-]+)?$') {
+            throw "Tag '$refName' must be v<major>.<minor>.<patch>[.<revision>][-suffix]"
           }
 
-          $parts = $tagVersion.Split('.')
+          $numeric = ($bundleVersion -split '-', 2)[0]
+          $parts = $numeric.Split('.')
           if ($parts.Count -eq 3) { $parts = @($parts[0], $parts[1], $parts[2], '0') }
 
           $appVersion = ($parts[0..2] -join '.')
@@ -67,11 +70,12 @@ jobs:
           $informational = "$appVersion+tag.$refName"
 
           "APP_VERSION=$appVersion" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "BUNDLE_VERSION=$bundleVersion" | Out-File -FilePath $env:GITHUB_ENV -Append
           "ASSEMBLY_VERSION=$assemblyVersion" | Out-File -FilePath $env:GITHUB_ENV -Append
           "FILE_VERSION=$fileVersion" | Out-File -FilePath $env:GITHUB_ENV -Append
           "INFORMATIONAL_VERSION=$informational" | Out-File -FilePath $env:GITHUB_ENV -Append
 
-          Write-Host "Release version: $refName -> APP_VERSION=$appVersion"
+          Write-Host "Release version: $refName -> APP_VERSION=$appVersion (bundle=$bundleVersion)"
 
       - name: Restore
         run: dotnet restore "cm6206_dual_router/Cm6206DualRouter.csproj"
@@ -175,24 +179,10 @@ jobs:
 
           New-Item -ItemType Directory -Force -Path "artifacts/installer" | Out-Null
 
-          & $iscc "installer/Cm6206DualRouter.iss" "/DMyAppVersion=$env:APP_VERSION"
+          & $iscc "installer/Cm6206DualRouter.iss" "/DMyAppVersion=$env:BUNDLE_VERSION"
 
-          $setupExe = Join-Path $PWD "artifacts/installer/Cm6206DualRouterSetup_$($env:APP_VERSION).exe"
+          $setupExe = Join-Path $PWD "artifacts/installer/Cm6206DualRouterSetup_$($env:BUNDLE_VERSION).exe"
           if (-not (Test-Path -LiteralPath $setupExe)) { throw "Installer output not found: $setupExe" }
-
-      - name: Package ZIP
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $src = Join-Path $PWD 'artifacts/cm6206_dual_router_win-x64'
-          if (-not (Test-Path -LiteralPath $src)) {
-            throw "Publish output not found: $src"
-          }
-
-          $zipPath = Join-Path $PWD ("artifacts/cm6206_dual_router_win-x64_{0}.zip" -f $env:APP_VERSION)
-          if (Test-Path -LiteralPath $zipPath) { Remove-Item -LiteralPath $zipPath -Force }
-          Compress-Archive -Path (Join-Path $src '*') -DestinationPath $zipPath
-          Write-Host "Created: $zipPath"
 
       - name: Cosign release assets (keyless)
         shell: pwsh
@@ -203,46 +193,64 @@ jobs:
           New-Item -ItemType Directory -Force -Path $outDir | Out-Null
 
           $exe = Join-Path $PWD 'artifacts/cm6206_dual_router_win-x64/Cm6206DualRouter.exe'
-          $zip = Join-Path $PWD ("artifacts/cm6206_dual_router_win-x64_{0}.zip" -f $env:APP_VERSION)
-          $setup = Join-Path $PWD ("artifacts/installer/Cm6206DualRouterSetup_{0}.exe" -f $env:APP_VERSION)
+          $setup = Join-Path $PWD ("artifacts/installer/Cm6206DualRouterSetup_{0}.exe" -f $env:BUNDLE_VERSION)
 
-          foreach ($f in @($exe, $zip, $setup)) {
+          foreach ($f in @($exe, $setup)) {
             if (-not (Test-Path -LiteralPath $f)) { throw "Expected file not found: $f" }
           }
 
           # Keyless signing uses GitHub OIDC; requires workflow permission: id-token: write
           cosign sign-blob --yes --output-signature (Join-Path $outDir 'Cm6206DualRouter.exe.sig') --output-certificate (Join-Path $outDir 'Cm6206DualRouter.exe.crt') $exe
-          cosign sign-blob --yes --output-signature (Join-Path $outDir ("cm6206_dual_router_win-x64_{0}.zip.sig" -f $env:APP_VERSION)) --output-certificate (Join-Path $outDir ("cm6206_dual_router_win-x64_{0}.zip.crt" -f $env:APP_VERSION)) $zip
-          cosign sign-blob --yes --output-signature (Join-Path $outDir ("Cm6206DualRouterSetup_{0}.exe.sig" -f $env:APP_VERSION)) --output-certificate (Join-Path $outDir ("Cm6206DualRouterSetup_{0}.exe.crt" -f $env:APP_VERSION)) $setup
+          cosign sign-blob --yes --output-signature (Join-Path $outDir ("Cm6206DualRouterSetup_{0}.exe.sig" -f $env:BUNDLE_VERSION)) --output-certificate (Join-Path $outDir ("Cm6206DualRouterSetup_{0}.exe.crt" -f $env:BUNDLE_VERSION)) $setup
 
-      - name: Upload artifact (cosign)
+      - name: Create bundle ZIP
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          $stage = Join-Path $PWD 'artifacts/bundle_staging'
+          if (Test-Path -LiteralPath $stage) { Remove-Item -LiteralPath $stage -Recurse -Force }
+          New-Item -ItemType Directory -Force -Path $stage | Out-Null
+
+          $portableSrc = Join-Path $PWD 'artifacts/cm6206_dual_router_win-x64'
+          $portableDst = Join-Path $stage 'portable'
+          Copy-Item -LiteralPath $portableSrc -Destination $portableDst -Recurse -Force
+
+          $installerDir = Join-Path $stage 'installer'
+          New-Item -ItemType Directory -Force -Path $installerDir | Out-Null
+          $setupExe = Join-Path $PWD ("artifacts/installer/Cm6206DualRouterSetup_{0}.exe" -f $env:BUNDLE_VERSION)
+          Copy-Item -LiteralPath $setupExe -Destination $installerDir -Force
+
+          $cosignSrc = Join-Path $PWD 'artifacts/cosign'
+          if (Test-Path -LiteralPath $cosignSrc) {
+            Copy-Item -LiteralPath $cosignSrc -Destination (Join-Path $stage 'cosign') -Recurse -Force
+          }
+
+          Copy-Item -LiteralPath (Join-Path $PWD 'cm6206_dual_router/router.json') -Destination (Join-Path $stage 'router.json') -Force
+
+          @"
+          CM6206 Dual Router (bundle)
+
+          - portable\\ : run Cm6206DualRouter.exe (no install)
+          - installer\\: optional Inno Setup installer EXE
+          - cosign\\   : Sigstore/cosign signatures (.sig/.crt)
+          - router.json : sample config
+          "@ | Out-File -FilePath (Join-Path $stage 'README.txt') -Encoding utf8
+
+          $bundle = Join-Path $PWD ("artifacts/cm6206_dual_router_bundle_{0}.zip" -f $env:BUNDLE_VERSION)
+          if (Test-Path -LiteralPath $bundle) { Remove-Item -LiteralPath $bundle -Force }
+          Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $bundle
+          Write-Host "Created bundle: $bundle"
+
+      - name: Upload artifact (bundle)
         uses: actions/upload-artifact@v4
         with:
-          name: cosign_${{ env.APP_VERSION }}
-          path: artifacts/cosign/
-
-      - name: Upload artifact (zip)
-        uses: actions/upload-artifact@v4
-        with:
-          name: cm6206_dual_router_win-x64_${{ env.APP_VERSION }}_zip
-          path: artifacts/cm6206_dual_router_win-x64_${{ env.APP_VERSION }}.zip
-
-      - name: Upload artifact (installer)
-        uses: actions/upload-artifact@v4
-        with:
-          name: cm6206_dual_router_setup_${{ env.APP_VERSION }}
-          path: artifacts/installer/Cm6206DualRouterSetup_${{ env.APP_VERSION }}.exe
+          name: cm6206_dual_router_bundle_${{ env.BUNDLE_VERSION }}
+          path: artifacts/cm6206_dual_router_bundle_${{ env.BUNDLE_VERSION }}.zip
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            artifacts/cm6206_dual_router_win-x64_${{ env.APP_VERSION }}.zip
-            artifacts/installer/Cm6206DualRouterSetup_${{ env.APP_VERSION }}.exe
-            artifacts/cosign/Cm6206DualRouter.exe.sig
-            artifacts/cosign/Cm6206DualRouter.exe.crt
-            artifacts/cosign/cm6206_dual_router_win-x64_${{ env.APP_VERSION }}.zip.sig
-            artifacts/cosign/cm6206_dual_router_win-x64_${{ env.APP_VERSION }}.zip.crt
-            artifacts/cosign/Cm6206DualRouterSetup_${{ env.APP_VERSION }}.exe.sig
-            artifacts/cosign/Cm6206DualRouterSetup_${{ env.APP_VERSION }}.exe.crt
+            artifacts/cm6206_dual_router_bundle_${{ env.BUNDLE_VERSION }}.zip
           generate_release_notes: true
