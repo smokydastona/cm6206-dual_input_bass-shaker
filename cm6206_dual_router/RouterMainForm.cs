@@ -135,18 +135,18 @@ public sealed class RouterMainForm : Form
     private readonly NeonMeter _consoleMeterA = new() { Vertical = true, Width = 18, Height = 160 };
     private readonly NeonMeter _consoleMeterB = new() { Vertical = true, Width = 18, Height = 160 };
 
-    private readonly TrackBar _consoleMusicGain = new() { Minimum = -600, Maximum = 200, TickFrequency = 100, Value = 0, Width = 200 };
+    private readonly NeonSlider _consoleMusicGain = new() { Minimum = -600, Maximum = 200, Value = 0, Width = 200 };
     private readonly Label _consoleMusicGainLabel = new() { Text = "0.0 dB", AutoSize = true };
-    private readonly TrackBar _consoleShakerGain = new() { Minimum = -600, Maximum = 200, TickFrequency = 100, Value = 0, Width = 200 };
+    private readonly NeonSlider _consoleShakerGain = new() { Minimum = -600, Maximum = 200, Value = 0, Width = 200 };
     private readonly Label _consoleShakerGainLabel = new() { Text = "0.0 dB", AutoSize = true };
 
     private readonly ComboBox _consoleInputMode = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 140 };
 
     private readonly NeonMeter[] _consoleOutMeters = new NeonMeter[8];
-    private readonly TrackBar[] _consoleOutGain = new TrackBar[8];
+    private readonly NeonSlider[] _consoleOutGain = new NeonSlider[8];
     private readonly Label[] _consoleOutGainLabel = new Label[8];
-    private readonly CheckBox[] _consoleOutMute = new CheckBox[8];
-    private readonly CheckBox[] _consoleOutSolo = new CheckBox[8];
+    private readonly NeonToggleButton[] _consoleOutMute = new NeonToggleButton[8];
+    private readonly NeonToggleButton[] _consoleOutSolo = new NeonToggleButton[8];
 
     private bool _suppressConsoleSync;
     private bool _consoleMatrixDirty;
@@ -254,6 +254,8 @@ public sealed class RouterMainForm : Form
         _statusStrip.Items.AddRange(new ToolStripItem[] { _statusRouter, _statusSpacer1, _statusFormat, _statusSpacer2, _statusLatency, _statusPreset });
         Controls.Add(_statusStrip);
 
+        ApplyNeonTheme(this);
+
         _autoStepTimer.Tick += (_, _) => AutoStepTick();
         _profilePollTimer.Tick += (_, _) => AutoProfileSwitchTick();
         _metersTimer.Interval = 16;
@@ -280,6 +282,89 @@ public sealed class RouterMainForm : Form
 
         UpdateDiagnostics();
         UpdateStatusBar();
+    }
+
+    private static void ApplyNeonTheme(Control root)
+    {
+        foreach (Control c in root.Controls)
+        {
+            // Don't restyle custom neon controls.
+            if (c is NeonPanel or NeonMatrixControl or NeonMeter or NeonSlider or NeonToggleButton)
+            {
+                if (c.HasChildren) ApplyNeonTheme(c);
+                continue;
+            }
+
+            switch (c)
+            {
+                case TabControl tc:
+                    tc.BackColor = NeonTheme.BgPrimary;
+                    tc.ForeColor = NeonTheme.TextSecondary;
+                    break;
+
+                case TabPage tp:
+                    tp.BackColor = NeonTheme.BgPrimary;
+                    tp.ForeColor = NeonTheme.TextPrimary;
+                    break;
+
+                case Panel or GroupBox:
+                    if (c.BackColor == SystemColors.Control) c.BackColor = NeonTheme.BgPrimary;
+                    if (c.ForeColor == SystemColors.ControlText) c.ForeColor = NeonTheme.TextPrimary;
+                    break;
+
+                case Label:
+                    if (c.ForeColor == SystemColors.ControlText) c.ForeColor = NeonTheme.TextSecondary;
+                    break;
+
+                case TextBox tb:
+                    tb.BorderStyle = BorderStyle.FixedSingle;
+                    if (tb.BackColor == SystemColors.Window) tb.BackColor = NeonTheme.BgRaised;
+                    if (tb.ForeColor == SystemColors.WindowText) tb.ForeColor = NeonTheme.TextPrimary;
+                    break;
+
+                case ComboBox cb:
+                    cb.FlatStyle = FlatStyle.Flat;
+                    if (cb.BackColor == SystemColors.Window) cb.BackColor = NeonTheme.BgRaised;
+                    if (cb.ForeColor == SystemColors.WindowText) cb.ForeColor = NeonTheme.TextPrimary;
+                    break;
+
+                case NumericUpDown nud:
+                    if (nud.BackColor == SystemColors.Window) nud.BackColor = NeonTheme.BgRaised;
+                    if (nud.ForeColor == SystemColors.WindowText) nud.ForeColor = NeonTheme.TextPrimary;
+                    break;
+
+                case Button b:
+                    b.FlatStyle = FlatStyle.Flat;
+                    b.FlatAppearance.BorderSize = 1;
+                    b.FlatAppearance.BorderColor = Color.FromArgb(140, NeonTheme.NeonPurple);
+                    if (b.BackColor == SystemColors.Control) b.BackColor = NeonTheme.BgRaised;
+                    if (b.ForeColor == SystemColors.ControlText) b.ForeColor = NeonTheme.TextPrimary;
+                    break;
+
+                case CheckBox cbx:
+                    if (cbx.ForeColor == SystemColors.ControlText) cbx.ForeColor = NeonTheme.TextPrimary;
+                    break;
+
+                case ListBox lb:
+                    if (lb.BackColor == SystemColors.Window) lb.BackColor = NeonTheme.BgRaised;
+                    if (lb.ForeColor == SystemColors.WindowText) lb.ForeColor = NeonTheme.TextPrimary;
+                    break;
+
+                case DataGridView dgv:
+                    dgv.EnableHeadersVisualStyles = false;
+                    dgv.BackgroundColor = NeonTheme.BgPrimary;
+                    dgv.GridColor = Color.FromArgb(50, 255, 255, 255);
+                    dgv.DefaultCellStyle.BackColor = NeonTheme.BgRaised;
+                    dgv.DefaultCellStyle.ForeColor = NeonTheme.TextPrimary;
+                    dgv.DefaultCellStyle.SelectionBackColor = Color.FromArgb(80, NeonTheme.NeonCyan);
+                    dgv.DefaultCellStyle.SelectionForeColor = NeonTheme.TextPrimary;
+                    dgv.ColumnHeadersDefaultCellStyle.BackColor = NeonTheme.BgPanel;
+                    dgv.ColumnHeadersDefaultCellStyle.ForeColor = NeonTheme.TextSecondary;
+                    break;
+            }
+
+            if (c.HasChildren) ApplyNeonTheme(c);
+        }
     }
 
     private TabPage BuildRoutingTab()
@@ -459,15 +544,8 @@ public sealed class RouterMainForm : Form
             var ch = i;
             _consoleOutMeters[i] = new NeonMeter { Vertical = false, Width = 110, Height = 14 };
 
-            _consoleOutGain[i] = new TrackBar
-            {
-                Minimum = -240,
-                Maximum = 120,
-                TickFrequency = 60,
-                Value = 0,
-                Width = 160
-            };
-            _consoleOutGainLabel[i] = new Label { Text = "0.0 dB", AutoSize = true, ForeColor = NeonTheme.TextSecondary };
+            _consoleOutGain[i] = new NeonSlider { Minimum = -240, Maximum = 120, Value = 0, Width = 160 };
+            _consoleOutGainLabel[i] = new Label { Text = "0.0 dB", AutoSize = true, ForeColor = NeonTheme.TextSecondary, Font = NeonTheme.CreateMonoFont(12) };
 
             var gainRow = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, FlowDirection = FlowDirection.LeftToRight, WrapContents = false };
             gainRow.Controls.Add(_consoleOutGain[i]);
@@ -476,7 +554,7 @@ public sealed class RouterMainForm : Form
             _consoleOutMute[i] = CreateToggle("M");
             _consoleOutSolo[i] = CreateToggle("S");
 
-            _consoleOutGain[i].Scroll += (_, _) =>
+            _consoleOutGain[i].ValueChanged += (_, _) =>
             {
                 if (_suppressConsoleSync) return;
                 _suppressConsoleSync = true;
@@ -531,48 +609,19 @@ public sealed class RouterMainForm : Form
     private static Label BuildMeterLabel(string text)
         => new() { Text = text, AutoSize = true, ForeColor = NeonTheme.TextSecondary, Padding = new Padding(0, 68, 6, 0) };
 
-    private static Control BuildGainRow(TrackBar slider, Label valueLabel, Action<int> onChanged)
+    private static Control BuildGainRow(NeonSlider slider, Label valueLabel, Action<int> onChanged)
     {
         var row = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, FlowDirection = FlowDirection.LeftToRight, WrapContents = false };
-        slider.Scroll += (_, _) => onChanged(slider.Value);
+        slider.ValueChanged += (_, _) => onChanged(slider.Value);
         row.Controls.Add(slider);
         valueLabel.Font = NeonTheme.CreateMonoFont(12);
         row.Controls.Add(valueLabel);
         return row;
     }
 
-    private static CheckBox CreateToggle(string text)
+    private static NeonToggleButton CreateToggle(string text)
     {
-        var cb = new CheckBox
-        {
-            Appearance = Appearance.Button,
-            Text = text,
-            AutoSize = false,
-            Width = 32,
-            Height = 22,
-            TextAlign = ContentAlignment.MiddleCenter,
-            ForeColor = NeonTheme.TextPrimary,
-            BackColor = NeonTheme.BgRaised,
-            FlatStyle = FlatStyle.Flat
-        };
-        cb.FlatAppearance.BorderColor = Color.FromArgb(120, NeonTheme.NeonPurple);
-        cb.FlatAppearance.BorderSize = 1;
-
-        cb.CheckedChanged += (_, _) =>
-        {
-            if (cb.Checked)
-            {
-                cb.BackColor = Color.FromArgb(80, NeonTheme.NeonCyan);
-                cb.FlatAppearance.BorderColor = NeonTheme.NeonPurple;
-            }
-            else
-            {
-                cb.BackColor = NeonTheme.BgRaised;
-                cb.FlatAppearance.BorderColor = Color.FromArgb(120, NeonTheme.NeonPurple);
-            }
-        };
-
-        return cb;
+        return new NeonToggleButton { Text = text, Width = 32, Height = 22 };
     }
 
     private TabPage BuildMetersTab()

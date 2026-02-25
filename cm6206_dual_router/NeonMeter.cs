@@ -10,6 +10,7 @@ internal sealed class NeonMeter : Control
     private float _display;
     private bool _clip;
     private float _clipT;
+    private float _clipPhase;
 
     private readonly Timer _timer = new();
 
@@ -34,9 +35,15 @@ internal sealed class NeonMeter : Control
                 _display *= fall;
 
             if (_clip)
+            {
                 _clipT = Math.Min(1f, _clipT + 0.22f);
+                _clipPhase += 0.55f;
+            }
             else
+            {
                 _clipT = Math.Max(0f, _clipT - 0.12f);
+                _clipPhase *= 0.92f;
+            }
 
             Invalidate();
         };
@@ -86,27 +93,35 @@ internal sealed class NeonMeter : Control
 
         if (fillRect.Width > 0 && fillRect.Height > 0)
         {
-            using var grad = CreateMeterGradient(fillRect);
+            using var grad = CreateMeterGradient(fillRect, Vertical);
             e.Graphics.FillRectangle(grad, fillRect);
         }
 
         // Clip pulse (red)
         if (_clipT > 0f)
         {
-            var a = (int)(120 * _clipT);
+            // Pulse while clipping (red border)
+            var pulse = (float)((Math.Sin(_clipPhase) + 1.0) * 0.5); // 0..1
+            var a = (int)((70 + 160 * pulse) * _clipT);
             using var pen = new Pen(Color.FromArgb(a, NeonTheme.MeterClip), 3f);
             e.Graphics.DrawRectangle(pen, rect);
         }
     }
 
-    private static LinearGradientBrush CreateMeterGradient(Rectangle rect)
+    private static LinearGradientBrush CreateMeterGradient(Rectangle rect, bool vertical)
     {
         // cyan -> purple -> amber
-        var brush = new LinearGradientBrush(rect, NeonTheme.MeterLow, NeonTheme.MeterHigh, LinearGradientMode.Vertical);
+        var brush = new LinearGradientBrush(
+            rect,
+            NeonTheme.MeterLow,
+            NeonTheme.MeterHigh,
+            vertical ? LinearGradientMode.Vertical : LinearGradientMode.Horizontal);
         var blend = new ColorBlend
         {
             Positions = new[] { 0f, 0.6f, 1f },
-            Colors = new[] { NeonTheme.MeterHigh, NeonTheme.MeterMid, NeonTheme.MeterLow }
+            Colors = vertical
+                ? new[] { NeonTheme.MeterHigh, NeonTheme.MeterMid, NeonTheme.MeterLow }
+                : new[] { NeonTheme.MeterLow, NeonTheme.MeterMid, NeonTheme.MeterHigh }
         };
         brush.InterpolationColors = blend;
         return brush;
