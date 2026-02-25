@@ -20,6 +20,15 @@ jobs:
         with:
           dotnet-version: "8.0.x"
 
+      - name: Install Inno Setup (for installer build)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          choco install innosetup -y --no-progress
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path -LiteralPath $iscc)) { throw "ISCC.exe not found after install: $iscc" }
+          & $iscc /?
+
       - name: Compute version (from tag)
         shell: pwsh
         run: |
@@ -132,6 +141,20 @@ jobs:
           $ErrorActionPreference = 'Stop'
           dotnet run -c Release --project tools/Cm6206AssetGenerator -- --out "artifacts/cm6206_dual_router_win-x64/assets/generated" --theme all
 
+      - name: Build installer (Inno Setup)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path -LiteralPath $iscc)) { throw "ISCC.exe not found: $iscc" }
+
+          New-Item -ItemType Directory -Force -Path "artifacts/installer" | Out-Null
+
+          & $iscc "installer/Cm6206DualRouter.iss" "/DMyAppVersion=$env:APP_VERSION"
+
+          $setupExe = Join-Path $PWD "artifacts/installer/Cm6206DualRouterSetup_$($env:APP_VERSION).exe"
+          if (-not (Test-Path -LiteralPath $setupExe)) { throw "Installer output not found: $setupExe" }
+
       - name: Package ZIP
         shell: pwsh
         run: |
@@ -152,8 +175,16 @@ jobs:
           name: cm6206_dual_router_win-x64_${{ env.APP_VERSION }}_zip
           path: artifacts/cm6206_dual_router_win-x64_${{ env.APP_VERSION }}.zip
 
+      - name: Upload artifact (installer)
+        uses: actions/upload-artifact@v4
+        with:
+          name: cm6206_dual_router_setup_${{ env.APP_VERSION }}
+          path: artifacts/installer/Cm6206DualRouterSetup_${{ env.APP_VERSION }}.exe
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: artifacts/cm6206_dual_router_win-x64_${{ env.APP_VERSION }}.zip
+          files: |
+            artifacts/cm6206_dual_router_win-x64_${{ env.APP_VERSION }}.zip
+            artifacts/installer/Cm6206DualRouterSetup_${{ env.APP_VERSION }}.exe
           generate_release_notes: true
