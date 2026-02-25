@@ -14,6 +14,9 @@ internal static class NeonTheme
     public static readonly Color TextSecondary = ColorTranslator.FromHtml("#A9B4C6");
     public static readonly Color TextDisabled = ColorTranslator.FromHtml("#5C6370");
 
+    // Back-compat alias used by some UI surfaces.
+    public static Color TextMuted => TextSecondary;
+
     // Neon accents (defaults chosen by us)
     public static readonly Color NeonCyan = ColorTranslator.FromHtml("#00F6FF");
     public static readonly Color NeonPurple = ColorTranslator.FromHtml("#B100FF");
