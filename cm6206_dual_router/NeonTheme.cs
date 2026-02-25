@@ -1,5 +1,5 @@
 using System.Drawing;
-using System.Diagnostics;
+using System.Windows.Forms;
 
 namespace Cm6206DualRouter;
 
@@ -29,79 +29,24 @@ internal static class NeonTheme
     public static readonly Color MeterHigh = ColorTranslator.FromHtml("#FFB000");
     public static readonly Color MeterClip = ColorTranslator.FromHtml("#FF3B3B");
 
-    public static Font CreateBaseFont(float sizePx, FontStyle style = FontStyle.Regular)
-    {
-        // Prefer standard Windows fonts first for maximum reliability.
-        // Custom fonts (Inter/JetBrains) are optional and occasionally problematic on some systems.
-        var sw = Stopwatch.StartNew();
-        SafeInfo($"NeonTheme.CreateBaseFont start sizePx={sizePx} style={style}");
+    private static readonly Font BaseUiFont = GetSystemUiFont();
+    private static readonly Font MonoUiFont = GetSystemUiFont();
 
-        foreach (var family in new[] { "Segoe UI", "Inter", "JetBrains Sans" })
-        {
-            try
-            {
-                SafeInfo($"NeonTheme.CreateBaseFont trying family='{family}'");
-                return new Font(family, sizePx, style, GraphicsUnit.Pixel);
-            }
-            catch
-            {
-                // ignore
-            }
-        }
+    // NOTE: These intentionally return shared system fonts (no custom construction) to avoid
+    // rare-but-real startup hangs during GDI font creation on some machines.
+    public static Font CreateBaseFont(float sizePx, FontStyle style = FontStyle.Regular) => BaseUiFont;
 
-        try
-        {
-            var fallback = SystemFonts.MessageBoxFont ?? new Font("Segoe UI", sizePx, style, GraphicsUnit.Pixel);
-            SafeInfo($"NeonTheme.CreateBaseFont fallback in {sw.ElapsedMilliseconds}ms");
-            return fallback;
-        }
-        catch
-        {
-            // absolute last resort
-            return new Font(FontFamily.GenericSansSerif, sizePx, style, GraphicsUnit.Pixel);
-        }
-    }
+    public static Font CreateMonoFont(float sizePx, FontStyle style = FontStyle.Regular) => MonoUiFont;
 
-    public static Font CreateMonoFont(float sizePx, FontStyle style = FontStyle.Regular)
-    {
-        var sw = Stopwatch.StartNew();
-        SafeInfo($"NeonTheme.CreateMonoFont start sizePx={sizePx} style={style}");
-
-        // Prefer standard monospace fonts first.
-        foreach (var family in new[] { "Consolas", "Cascadia Mono", "JetBrains Mono" })
-        {
-            try
-            {
-                SafeInfo($"NeonTheme.CreateMonoFont trying family='{family}'");
-                return new Font(family, sizePx, style, GraphicsUnit.Pixel);
-            }
-            catch
-            {
-                // ignore
-            }
-        }
-
-        try
-        {
-            var fallback = SystemFonts.MessageBoxFont ?? new Font("Consolas", sizePx, style, GraphicsUnit.Pixel);
-            SafeInfo($"NeonTheme.CreateMonoFont fallback in {sw.ElapsedMilliseconds}ms");
-            return fallback;
-        }
-        catch
-        {
-            return new Font(FontFamily.GenericMonospace, sizePx, style, GraphicsUnit.Pixel);
-        }
-    }
-
-    private static void SafeInfo(string message)
+    private static Font GetSystemUiFont()
     {
         try
         {
-            AppLog.Info(message);
+            return SystemFonts.MessageBoxFont ?? SystemFonts.DefaultFont;
         }
         catch
         {
-            // ignore
+            return Control.DefaultFont;
         }
     }
 }

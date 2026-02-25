@@ -22,8 +22,6 @@ internal sealed class NeonToggleButton : Control
         Height = 22;
         Cursor = Cursors.Hand;
 
-        Font = NeonTheme.CreateBaseFont(13, FontStyle.Bold);
-
         _anim.Interval = 16;
         _anim.Tick += (_, _) =>
         {

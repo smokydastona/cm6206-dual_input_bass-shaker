@@ -180,7 +180,7 @@ public sealed class RouterMainForm : Form
     };
 
     private readonly StatusStrip _statusStrip = new() { Dock = DockStyle.Bottom };
-    private readonly ToolStripStatusLabel _statusHealth = new() { Text = "", Font = new Font(SystemFonts.DefaultFont, FontStyle.Bold) };
+    private readonly ToolStripStatusLabel _statusHealth = new() { Text = "" };
     private readonly ToolStripStatusLabel _statusRouter = new() { Text = "Router: (unknown)" };
     private readonly ToolStripStatusLabel _statusSpacer1 = new() { Spring = true };
     private readonly ToolStripStatusLabel _statusFormat = new() { Text = "Format: (unknown)" };
@@ -1415,9 +1415,9 @@ public sealed class RouterMainForm : Form
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 60));  // clip
 
         var row = 0;
-        layout.Controls.Add(new Label { Text = "Signal", AutoSize = true, Font = new Font(Font, FontStyle.Bold) }, 0, row);
-        layout.Controls.Add(new Label { Text = "Level", AutoSize = true, Font = new Font(Font, FontStyle.Bold) }, 1, row);
-        layout.Controls.Add(new Label { Text = "dBFS", AutoSize = true, Font = new Font(Font, FontStyle.Bold) }, 2, row);
+        layout.Controls.Add(new Label { Text = "Signal", AutoSize = true }, 0, row);
+        layout.Controls.Add(new Label { Text = "Level", AutoSize = true }, 1, row);
+        layout.Controls.Add(new Label { Text = "dBFS", AutoSize = true }, 2, row);
         layout.Controls.Add(new Label { Text = "", AutoSize = true }, 3, row);
         row++;
 
@@ -2508,12 +2508,12 @@ public sealed class RouterMainForm : Form
         panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 70));  // solo
         panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 80));  // invert
 
-        panel.Controls.Add(new Label { Text = "Output", AutoSize = true, Font = new Font(Font, FontStyle.Bold) }, 0, 0);
-        panel.Controls.Add(new Label { Text = "Source", AutoSize = true, Font = new Font(Font, FontStyle.Bold) }, 1, 0);
-        panel.Controls.Add(new Label { Text = "Gain", AutoSize = true, Font = new Font(Font, FontStyle.Bold) }, 2, 0);
-        panel.Controls.Add(new Label { Text = "Mute", AutoSize = true, Font = new Font(Font, FontStyle.Bold) }, 3, 0);
-        panel.Controls.Add(new Label { Text = "Solo", AutoSize = true, Font = new Font(Font, FontStyle.Bold) }, 4, 0);
-        panel.Controls.Add(new Label { Text = "Invert", AutoSize = true, Font = new Font(Font, FontStyle.Bold) }, 5, 0);
+        panel.Controls.Add(new Label { Text = "Output", AutoSize = true }, 0, 0);
+        panel.Controls.Add(new Label { Text = "Source", AutoSize = true }, 1, 0);
+        panel.Controls.Add(new Label { Text = "Gain", AutoSize = true }, 2, 0);
+        panel.Controls.Add(new Label { Text = "Mute", AutoSize = true }, 3, 0);
+        panel.Controls.Add(new Label { Text = "Solo", AutoSize = true }, 4, 0);
+        panel.Controls.Add(new Label { Text = "Invert", AutoSize = true }, 5, 0);
 
         for (var i = 0; i < 8; i++)
         {

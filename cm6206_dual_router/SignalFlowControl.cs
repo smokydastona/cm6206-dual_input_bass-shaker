@@ -81,7 +81,7 @@ internal sealed class SignalFlowControl : Control
         var status = RouterRunning ? "Routing active" : "Routing stopped";
         var statusColor = OutputOk ? (RouterRunning ? cOk : NeonTheme.TextMuted) : cErr;
         using var statusBrush = new SolidBrush(statusColor);
-        e.Graphics.DrawString(status, NeonTheme.CreateMonoFont(10), statusBrush, rect.Left + pad, rect.Bottom - pad - 14);
+        e.Graphics.DrawString(status, Font, statusBrush, rect.Left + pad, rect.Bottom - pad - 14);
     }
 
     private static void DrawNode(Graphics g, Rectangle r, string title, string subtitle, Color titleColor, Color stateColor)
@@ -101,9 +101,9 @@ internal sealed class SignalFlowControl : Control
 
         var tRect = new Rectangle(r.Left + 8, r.Top + 4, r.Width - 16, 14);
         var sRect = new Rectangle(r.Left + 8, r.Top + 18, r.Width - 16, 12);
-        g.DrawString(title, NeonTheme.CreateBaseFont(10, FontStyle.Bold), tBrush, tRect);
+        g.DrawString(title, Control.DefaultFont, tBrush, tRect);
         if (!string.IsNullOrWhiteSpace(subtitle))
-            g.DrawString(subtitle, NeonTheme.CreateMonoFont(8), sBrush, sRect);
+            g.DrawString(subtitle, Control.DefaultFont, sBrush, sRect);
     }
 
     private static void DrawArrow(Graphics g, Point a, Point b, Color color)

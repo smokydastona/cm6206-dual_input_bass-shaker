@@ -25,7 +25,7 @@ internal sealed class NeonMatrixControl : Control
         DoubleBuffered = true;
         SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint | ControlStyles.OptimizedDoubleBuffer, true);
 
-        Font = NeonTheme.CreateBaseFont(13);
+        // Use the inherited/system font; avoid custom font creation during startup.
         BackColor = Color.Transparent;
 
         _anim.Interval = 16;
@@ -155,7 +155,7 @@ internal sealed class NeonMatrixControl : Control
         var headerH = 24;
         var labelW = 90;
 
-        using var titleFont = NeonTheme.CreateBaseFont(13, FontStyle.Bold);
+        var titleFont = Font;
         using var labelBrush = new SolidBrush(NeonTheme.TextSecondary);
 
         // Column labels
