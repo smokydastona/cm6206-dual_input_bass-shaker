@@ -30,6 +30,10 @@ public sealed class RouterMainForm : Form
     private DateTime _lastOutputCheckUtc = DateTime.MinValue;
     private bool _cachedOutputOk = true;
 
+    private bool _deviceRefreshRunning;
+    private bool _suppressFormatUpdate;
+    private int _formatInfoRequestId;
+
     private readonly TabControl _tabs = new() { Dock = DockStyle.Fill };
     private TabPage? _simplePage;
     private TabPage? _devicesPage;
@@ -259,7 +263,8 @@ public sealed class RouterMainForm : Form
 
     public RouterMainForm(string configPath)
     {
-            _aiCopilot = new AiCopilotService(new OpenAiClient(new HttpClient()));
+
+        _aiCopilot = new AiCopilotService(new OpenAiClient(new HttpClient()));
         _configPath = configPath;
         Text = "CM6206 Dual Router";
         Width = 860;
@@ -349,16 +354,33 @@ public sealed class RouterMainForm : Form
             VoicePrompter.Dispose();
         };
 
-        RefreshDeviceLists();
+        // Keep constructor fast: if audio device enumeration hangs on a system,
+        // doing it here prevents the window from ever showing.
         LoadConfigIntoControls();
-
         WireFormatUi();
-        UpdateFormatInfo();
-
         RefreshProfilesCombo();
-
         UpdateDiagnostics();
         UpdateStatusBar();
+
+        Shown += async (_, _) => await StartupAfterShownAsync();
+    }
+
+    private async Task StartupAfterShownAsync()
+    {
+        try
+        {
+            AppLog.Info("UI shown; starting async device refresh...");
+            await RefreshDeviceListsAsync(showErrorDialog: false);
+            LoadDeviceSelectionsFromConfig();
+            UpdateStatusBar();
+            UpdateFormatInfo();
+        }
+        catch (Exception ex)
+        {
+            _lastStartError = ex.Message;
+            AppLog.Error("StartupAfterShownAsync failed", ex);
+            UpdateStatusBar();
+        }
     }
 
     private async Task<CopilotResponse> ExplainCurrentScreenAsync()
@@ -2277,36 +2299,73 @@ public sealed class RouterMainForm : Form
 
     private void UpdateFormatInfo()
     {
+        if (_suppressFormatUpdate)
+            return;
+
+        var devName = _outputDeviceCombo.SelectedItem as string;
+        if (string.IsNullOrWhiteSpace(devName))
+        {
+            _mixFormatLabel.Text = "";
+            _effectiveFormatLabel.Text = "";
+            _formatWarningLabel.Text = "";
+            return;
+        }
+
+        _sampleRateCombo.Enabled = _useExclusiveMode.Checked;
+
+        var temp = _config.Clone();
+        temp.OutputRenderDevice = devName;
+        temp.UseExclusiveMode = _useExclusiveMode.Checked;
+        temp.SampleRate = GetSelectedSampleRate();
+
+        var requestId = Interlocked.Increment(ref _formatInfoRequestId);
+        _ = UpdateFormatInfoAsync(requestId, devName, temp);
+    }
+
+    private async Task UpdateFormatInfoAsync(int requestId, string devName, RouterConfig temp)
+    {
         try
         {
-            var devName = _outputDeviceCombo.SelectedItem as string;
-            if (string.IsNullOrWhiteSpace(devName))
+            var probeTask = Task.Run(() =>
             {
-                _mixFormatLabel.Text = "";
-                _effectiveFormatLabel.Text = "";
-                _formatWarningLabel.Text = "";
+                using var outputDevice = DeviceHelper.GetRenderDeviceByFriendlyName(devName);
+                var mix = outputDevice.AudioClient.MixFormat;
+                var negotiation = OutputFormatNegotiator.Negotiate(temp, outputDevice);
+                return (mix, negotiation);
+            });
+
+            var completed = await Task.WhenAny(probeTask, Task.Delay(TimeSpan.FromSeconds(5))).ConfigureAwait(true);
+            if (completed != probeTask)
+                throw new TimeoutException("Timed out while probing the output device format.");
+
+            var (mix, negotiation) = await probeTask.ConfigureAwait(true);
+            if (IsDisposed)
                 return;
-            }
 
-            using var outputDevice = DeviceHelper.GetRenderDeviceByFriendlyName(devName);
-            var mix = outputDevice.AudioClient.MixFormat;
-            _mixFormatLabel.Text = $"Windows mix: {mix.SampleRate} Hz, {mix.Channels}ch ({mix.Encoding})";
+            BeginInvoke(new Action(() =>
+            {
+                if (requestId != _formatInfoRequestId)
+                    return;
 
-            _sampleRateCombo.Enabled = _useExclusiveMode.Checked;
-
-            var temp = _config.Clone();
-            temp.OutputRenderDevice = devName;
-            temp.UseExclusiveMode = _useExclusiveMode.Checked;
-            temp.SampleRate = GetSelectedSampleRate();
-
-            var negotiation = OutputFormatNegotiator.Negotiate(temp, outputDevice);
-            _effectiveFormatLabel.Text = $"Effective output: 7.1 float @ {negotiation.EffectiveConfig.SampleRate} Hz ({(temp.UseExclusiveMode ? "Exclusive" : "Shared")})";
-            _formatWarningLabel.Text = negotiation.Warning ?? "";
+                _mixFormatLabel.Text = $"Windows mix: {mix.SampleRate} Hz, {mix.Channels}ch ({mix.Encoding})";
+                _effectiveFormatLabel.Text = $"Effective output: 7.1 float @ {negotiation.EffectiveConfig.SampleRate} Hz ({(temp.UseExclusiveMode ? "Exclusive" : "Shared")})";
+                _formatWarningLabel.Text = negotiation.Warning ?? "";
+            }));
         }
         catch (Exception ex)
         {
-            _effectiveFormatLabel.Text = "";
-            _formatWarningLabel.Text = ex.Message;
+            AppLog.Warn($"UpdateFormatInfo failed: {ex.Message}");
+            if (IsDisposed)
+                return;
+
+            BeginInvoke(new Action(() =>
+            {
+                if (requestId != _formatInfoRequestId)
+                    return;
+
+                _effectiveFormatLabel.Text = "";
+                _formatWarningLabel.Text = ex.Message;
+            }));
         }
     }
 
@@ -2808,70 +2867,156 @@ public sealed class RouterMainForm : Form
         return page;
     }
 
+    private sealed record DeviceLists(List<string> RenderDevices, List<string> CaptureDevices);
+
     private void RefreshDeviceLists()
     {
+        _ = RefreshDeviceListsAsync(showErrorDialog: true);
+    }
+
+    private async Task RefreshDeviceListsAsync(bool showErrorDialog)
+    {
+        if (_deviceRefreshRunning)
+            return;
+
+        _deviceRefreshRunning = true;
+        try
+        {
+            AppLog.Info("Refreshing Windows audio device lists...");
+            var task = Task.Run(EnumerateDeviceLists);
+            var completed = await Task.WhenAny(task, Task.Delay(TimeSpan.FromSeconds(8))).ConfigureAwait(true);
+            if (completed != task)
+                throw new TimeoutException("Timed out while enumerating Windows audio devices.");
+
+            var lists = await task.ConfigureAwait(true);
+            if (IsDisposed)
+                return;
+
+            AppLog.Info($"Audio devices enumerated: render={lists.RenderDevices.Count}, capture={lists.CaptureDevices.Count}");
+
+            BeginInvoke(new Action(() => ApplyDeviceLists(lists)));
+        }
+        catch (Exception ex)
+        {
+            _lastStartError = $"Device refresh failed: {ex.Message}";
+            AppLog.Error("Device refresh failed", ex);
+
+            if (showErrorDialog && !IsDisposed)
+            {
+                try
+                {
+                    MessageBox.Show(this, ex.Message, "Device refresh failed", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
+                catch
+                {
+                    // ignore
+                }
+            }
+        }
+        finally
+        {
+            _deviceRefreshRunning = false;
+        }
+    }
+
+    private static DeviceLists EnumerateDeviceLists()
+    {
         using var enumerator = new MMDeviceEnumerator();
-        var devices = enumerator.EnumerateAudioEndPoints(DataFlow.Render, DeviceState.Active)
+
+        var renderDevices = enumerator.EnumerateAudioEndPoints(DataFlow.Render, DeviceState.Active)
             .Select(d => d.FriendlyName)
             .Where(s => !string.IsNullOrWhiteSpace(s))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
         // Add friendly "default" choice for Simple Mode (works anywhere a render device name is accepted).
-        if (!devices.Contains(DeviceHelper.DefaultSystemRenderDevice))
-            devices.Insert(0, DeviceHelper.DefaultSystemRenderDevice);
+        if (!renderDevices.Contains(DeviceHelper.DefaultSystemRenderDevice))
+            renderDevices.Insert(0, DeviceHelper.DefaultSystemRenderDevice);
 
         var captureDevices = enumerator.EnumerateAudioEndPoints(DataFlow.Capture, DeviceState.Active)
             .Select(d => d.FriendlyName)
+            .Where(s => !string.IsNullOrWhiteSpace(s))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
-        void SetItems(ComboBox combo, bool allowNone)
+        return new DeviceLists(renderDevices, captureDevices);
+    }
+
+    private void ApplyDeviceLists(DeviceLists lists)
+    {
+        _suppressFormatUpdate = true;
+        try
         {
-            var selected = combo.SelectedItem as string;
-            combo.Items.Clear();
-            if (allowNone)
-                combo.Items.Add(DeviceHelper.NoneDevice);
-            foreach (var name in devices) combo.Items.Add(name);
-            if (!string.IsNullOrWhiteSpace(selected) && combo.Items.Contains(selected))
-                combo.SelectedItem = selected;
+            var devices = lists.RenderDevices;
+            var captureDevices = lists.CaptureDevices;
+
+            void SetItems(ComboBox combo, bool allowNone)
+            {
+                var selected = combo.SelectedItem as string;
+                combo.Items.Clear();
+                if (allowNone)
+                    combo.Items.Add(DeviceHelper.NoneDevice);
+                foreach (var name in devices) combo.Items.Add(name);
+                if (!string.IsNullOrWhiteSpace(selected) && combo.Items.Contains(selected))
+                    combo.SelectedItem = selected;
+            }
+
+            SetItems(_musicDeviceCombo, allowNone: false);
+            SetItems(_shakerDeviceCombo, allowNone: true);
+            SetItems(_outputDeviceCombo, allowNone: false);
+
+            // Simple Mode dropdowns
+            SetItems(_simpleGameSourceCombo, allowNone: false);
+            SetItems(_simpleSecondarySourceCombo, allowNone: true);
+            SetItems(_simpleOutputCombo, allowNone: false);
+
+            _assistant.UpdateOutputDevices(devices.ToArray());
+
+            // capture list
+            {
+                var selected = _latencyInputCombo.SelectedItem as string;
+                _latencyInputCombo.Items.Clear();
+                foreach (var name in captureDevices) _latencyInputCombo.Items.Add(name);
+                if (!string.IsNullOrWhiteSpace(selected) && _latencyInputCombo.Items.Contains(selected))
+                    _latencyInputCombo.SelectedItem = selected;
+            }
         }
-
-        SetItems(_musicDeviceCombo, allowNone: false);
-        SetItems(_shakerDeviceCombo, allowNone: true);
-        SetItems(_outputDeviceCombo, allowNone: false);
-
-        // Simple Mode dropdowns
-        SetItems(_simpleGameSourceCombo, allowNone: false);
-        SetItems(_simpleSecondarySourceCombo, allowNone: true);
-        SetItems(_simpleOutputCombo, allowNone: false);
-
-        _assistant.UpdateOutputDevices(devices.ToArray());
-
-        // capture list
+        finally
         {
-            var selected = _latencyInputCombo.SelectedItem as string;
-            _latencyInputCombo.Items.Clear();
-            foreach (var name in captureDevices) _latencyInputCombo.Items.Add(name);
-            if (!string.IsNullOrWhiteSpace(selected) && _latencyInputCombo.Items.Contains(selected))
-                _latencyInputCombo.SelectedItem = selected;
+            _suppressFormatUpdate = false;
+        }
+    }
+
+    private void LoadDeviceSelectionsFromConfig()
+    {
+        _suppressFormatUpdate = true;
+        try
+        {
+            SelectIfPresent(_musicDeviceCombo, _config.MusicInputRenderDevice);
+            SelectIfPresent(_shakerDeviceCombo, _config.ShakerInputRenderDevice);
+            SelectIfPresent(_outputDeviceCombo, _config.OutputRenderDevice);
+
+            SelectIfPresent(_simpleGameSourceCombo, _config.MusicInputRenderDevice);
+
+            // Secondary source may be empty; if so, leave at (None) if present.
+            if (string.IsNullOrWhiteSpace(_config.ShakerInputRenderDevice))
+                _simpleSecondarySourceCombo.SelectedItem = DeviceHelper.NoneDevice;
+            else
+                SelectIfPresent(_simpleSecondarySourceCombo, _config.ShakerInputRenderDevice);
+
+            SelectIfPresent(_simpleOutputCombo, _config.OutputRenderDevice);
+            if (!string.IsNullOrWhiteSpace(_config.LatencyInputCaptureDevice))
+                SelectIfPresent(_latencyInputCombo, _config.LatencyInputCaptureDevice);
+        }
+        finally
+        {
+            _suppressFormatUpdate = false;
         }
     }
 
     private void LoadConfigIntoControls()
     {
-        SelectIfPresent(_musicDeviceCombo, _config.MusicInputRenderDevice);
-        SelectIfPresent(_shakerDeviceCombo, _config.ShakerInputRenderDevice);
-        SelectIfPresent(_outputDeviceCombo, _config.OutputRenderDevice);
-
-        SelectIfPresent(_simpleGameSourceCombo, _config.MusicInputRenderDevice);
-        // Secondary source may be empty; if so, leave at (None) if present.
-        if (string.IsNullOrWhiteSpace(_config.ShakerInputRenderDevice))
-            _simpleSecondarySourceCombo.SelectedItem = DeviceHelper.NoneDevice;
-        else
-            SelectIfPresent(_simpleSecondarySourceCombo, _config.ShakerInputRenderDevice);
-        SelectIfPresent(_simpleOutputCombo, _config.OutputRenderDevice);
-        if (!string.IsNullOrWhiteSpace(_config.LatencyInputCaptureDevice))
-            SelectIfPresent(_latencyInputCombo, _config.LatencyInputCaptureDevice);
+        LoadDeviceSelectionsFromConfig();
 
         _musicGainDb.Value = (decimal)_config.MusicGainDb;
         _shakerGainDb.Value = (decimal)_config.ShakerGainDb;
