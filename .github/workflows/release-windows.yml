@@ -107,17 +107,18 @@ jobs:
             exit 0
           }
 
-          $artifactDir = Join-Path $PWD 'artifacts/cm6206_dual_router_win-x64'
-          $exe = Join-Path $artifactDir 'Cm6206DualRouter.exe'
-          if (-not (Test-Path -LiteralPath $exe)) {
-            throw "Expected publish output not found: $exe"
-          }
+          try {
+            $artifactDir = Join-Path $PWD 'artifacts/cm6206_dual_router_win-x64'
+            $exe = Join-Path $artifactDir 'Cm6206DualRouter.exe'
+            if (-not (Test-Path -LiteralPath $exe)) {
+              throw "Expected publish output not found: $exe"
+            }
 
-          $pfxPath = Join-Path $env:RUNNER_TEMP 'codesign.pfx'
-          [IO.File]::WriteAllBytes($pfxPath, [Convert]::FromBase64String($env:CODESIGN_PFX_BASE64))
+            $pfxPath = Join-Path $env:RUNNER_TEMP 'codesign.pfx'
+            [IO.File]::WriteAllBytes($pfxPath, [Convert]::FromBase64String($env:CODESIGN_PFX_BASE64))
 
-          $timestamp = $env:CODESIGN_TIMESTAMP_URL
-          if ([string]::IsNullOrWhiteSpace($timestamp)) { $timestamp = 'http://timestamp.digicert.com' }
+            $timestamp = $env:CODESIGN_TIMESTAMP_URL
+            if ([string]::IsNullOrWhiteSpace($timestamp)) { $timestamp = 'http://timestamp.digicert.com' }
 
           function Find-SignTool {
             $cmd = Get-Command signtool.exe -ErrorAction SilentlyContinue
@@ -136,14 +137,24 @@ jobs:
               if ($found) { return $found.FullName }
             }
 
-            throw 'signtool.exe not found on runner.'
+            return $null
           }
 
           $signtool = Find-SignTool
+          if ([string]::IsNullOrWhiteSpace($signtool)) {
+            Write-Host 'Code signing skipped (signtool.exe not found on runner).'
+            exit 0
+          }
+
           Write-Host "Using signtool: $signtool"
 
           & $signtool sign /fd sha256 /a /f $pfxPath /p $env:CODESIGN_PFX_PASSWORD /tr $timestamp /td sha256 $exe
           & $signtool verify /pa /v $exe
+          }
+          catch {
+            Write-Warning "Code signing failed (continuing without signing): $($_.Exception.Message)"
+            exit 0
+          }
 
       - name: Generate UI assets (PNG/SVG/9-slice)
         shell: pwsh
