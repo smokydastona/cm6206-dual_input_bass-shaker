@@ -6,6 +6,16 @@
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
     <UseWindowsForms>true</UseWindowsForms>
+
+    <!-- Identity / File Properties (Details tab) -->
+    <Authors>SmokyDaStona</Authors>
+    <Company>SmokyDaStona</Company>
+    <Product>CM6206 Dual Router</Product>
+    <AssemblyTitle>CM6206 Dual Router</AssemblyTitle>
+    <Description>Dual-input Windows audio router (two loopback capture inputs -> one 7.1 output)</Description>
+    <PackageId>Cm6206DualRouter</PackageId>
+    <RepositoryUrl>https://github.com/smokydastona/cm6206-dual_input_bass-shaker</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
   </PropertyGroup>
 
   <ItemGroup>

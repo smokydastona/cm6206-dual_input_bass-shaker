@@ -23,6 +23,16 @@ It’s designed to avoid driver/registry hacks and to not fight Windows default-
 
 For full usage details, see `cm6206_dual_router/README.md`.
 
+## Minecraft haptics
+This repo is **routing/mixing only**.
+
+If you want Minecraft-specific haptics (telemetry → tactile audio), use the Forge mod repo:
+- https://github.com/smokydastona/minecraft_telemetery
+
+Common setup:
+- Mod outputs haptics to a virtual device (e.g. VB-CABLE)
+- This router loopback-captures that device as the “Shaker input” and routes to your CM6206 7.1 output
+
 ## Prebuilt EXE (GitHub Actions)
 - This repo publishes a self-contained `win-x64` single-file build.
 - On GitHub: **Actions** → latest **build-windows** → download artifact `cm6206_dual_router_win-x64`.
