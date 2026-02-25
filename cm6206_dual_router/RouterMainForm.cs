@@ -40,32 +40,27 @@ public sealed class RouterMainForm : Form
     private TabPage? _calibrationPage;
 
     // Simple Mode controls
-    private readonly ComboBox _simpleGameSourceCombo = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 520 };
-    private readonly ComboBox _simpleSecondarySourceCombo = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 520 };
-    private readonly ComboBox _simpleOutputCombo = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 520 };
+    private readonly ComboBox _simpleGameSourceCombo;
+    private readonly ComboBox _simpleSecondarySourceCombo;
+    private readonly ComboBox _simpleOutputCombo;
 
-    private readonly ComboBox _simplePresetCombo = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 300 };
-    private readonly Label _simplePresetSummary = new() { AutoSize = true, ForeColor = NeonTheme.TextMuted };
+    private readonly ComboBox _simplePresetCombo;
+    private readonly Label _simplePresetSummary;
 
-    private readonly NeonSlider _simpleMasterGain = new() { Minimum = -600, Maximum = 200, Value = 0, Width = 260 };
-    private readonly Label _simpleMasterGainLabel = new() { Text = "0.0 dB", AutoSize = true, ForeColor = NeonTheme.TextSecondary };
+    private readonly NeonSlider _simpleMasterGain;
+    private readonly Label _simpleMasterGainLabel;
 
-    private readonly NeonSlider _simpleShakerStrength = new() { Minimum = -240, Maximum = 120, Value = -60, Width = 260 };
-    private readonly Label _simpleShakerStrengthLabel = new() { Text = "-6.0 dB", AutoSize = true, ForeColor = NeonTheme.TextSecondary };
+    private readonly NeonSlider _simpleShakerStrength;
+    private readonly Label _simpleShakerStrengthLabel;
 
-    private readonly Button _simpleStartButton = new() { Text = "▶ Start Routing", Width = 260, Height = 44 };
-    private readonly Button _simpleStopButton = new() { Text = "■ Stop", Width = 120, Height = 44, Enabled = false };
-    private readonly CheckBox _simpleAdvancedToggle = new() { Text = "⚙ Advanced Controls", AutoSize = true };
-    private readonly Label _simpleStatus = new() { Text = "", AutoSize = true };
-    private readonly Label _simpleNextHint = new()
-    {
-        Text = "New here?  1) Select devices   2) Pick a preset   3) Press Start",
-        AutoSize = true,
-        ForeColor = NeonTheme.TextMuted
-    };
+    private readonly Button _simpleStartButton;
+    private readonly Button _simpleStopButton;
+    private readonly CheckBox _simpleAdvancedToggle;
+    private readonly Label _simpleStatus;
+    private readonly Label _simpleNextHint;
 
-    private readonly SignalFlowControl _simpleFlow = new() { Dock = DockStyle.Top };
-    private readonly ToolTip _toolTip = new() { AutomaticDelay = 200, AutoPopDelay = 6000, ReshowDelay = 200, InitialDelay = 250, ShowAlways = true };
+    private readonly SignalFlowControl _simpleFlow;
+    private readonly ToolTip _toolTip;
 
     private readonly ComboBox _profileCombo = new() { DropDownStyle = ComboBoxStyle.DropDownList };
     private readonly Button _profileLoadButton = new() { Text = "Load" };
@@ -285,6 +280,30 @@ public sealed class RouterMainForm : Form
 
         _assistant = new SetupAssistantPanel();
         AppLog.Info("RouterMainForm ctor: _assistant ok");
+
+        AppLog.Info("RouterMainForm ctor: init simple mode controls...");
+        _simpleGameSourceCombo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 520 };
+        _simpleSecondarySourceCombo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 520 };
+        _simpleOutputCombo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 520 };
+        _simplePresetCombo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 300 };
+        _simplePresetSummary = new Label { AutoSize = true, ForeColor = NeonTheme.TextMuted };
+        _simpleMasterGain = new NeonSlider { Minimum = -600, Maximum = 200, Value = 0, Width = 260 };
+        _simpleMasterGainLabel = new Label { Text = "0.0 dB", AutoSize = true, ForeColor = NeonTheme.TextSecondary };
+        _simpleShakerStrength = new NeonSlider { Minimum = -240, Maximum = 120, Value = -60, Width = 260 };
+        _simpleShakerStrengthLabel = new Label { Text = "-6.0 dB", AutoSize = true, ForeColor = NeonTheme.TextSecondary };
+        _simpleStartButton = new Button { Text = "▶ Start Routing", Width = 260, Height = 44 };
+        _simpleStopButton = new Button { Text = "■ Stop", Width = 120, Height = 44, Enabled = false };
+        _simpleAdvancedToggle = new CheckBox { Text = "⚙ Advanced Controls", AutoSize = true };
+        _simpleStatus = new Label { Text = "", AutoSize = true };
+        _simpleNextHint = new Label
+        {
+            Text = "New here?  1) Select devices   2) Pick a preset   3) Press Start",
+            AutoSize = true,
+            ForeColor = NeonTheme.TextMuted
+        };
+        _simpleFlow = new SignalFlowControl { Dock = DockStyle.Top };
+        _toolTip = new ToolTip { AutomaticDelay = 200, AutoPopDelay = 6000, ReshowDelay = 200, InitialDelay = 250, ShowAlways = true };
+        AppLog.Info("RouterMainForm ctor: simple mode controls ok");
 
         _aiCopilot = new AiCopilotService(new OpenAiClient(new HttpClient()));
         _configPath = configPath;
