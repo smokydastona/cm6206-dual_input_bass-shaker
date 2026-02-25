@@ -24,10 +24,12 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          choco install innosetup -y --no-progress
           $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
-          if (-not (Test-Path -LiteralPath $iscc)) { throw "ISCC.exe not found after install: $iscc" }
-          & $iscc /?
+          if (-not (Test-Path -LiteralPath $iscc)) {
+            choco install innosetup -y --no-progress
+          }
+          if (-not (Test-Path -LiteralPath $iscc)) { throw "ISCC.exe not found: $iscc" }
+          Get-Item -LiteralPath $iscc | Select-Object FullName, Length, LastWriteTime | Format-List
 
       - name: Compute version (from tag)
         shell: pwsh
