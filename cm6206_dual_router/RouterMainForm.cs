@@ -62,20 +62,20 @@ public sealed class RouterMainForm : Form
     private readonly SignalFlowControl _simpleFlow;
     private readonly ToolTip _toolTip;
 
-    private readonly ComboBox _profileCombo = new() { DropDownStyle = ComboBoxStyle.DropDownList };
-    private readonly Button _profileLoadButton = new() { Text = "Load" };
-    private readonly Button _profileSaveAsButton = new() { Text = "Save As" };
-    private readonly Button _profileDeleteButton = new() { Text = "Delete" };
-    private readonly Button _profileImportButton = new() { Text = "Import..." };
-    private readonly Button _profileOpenFolderButton = new() { Text = "Open folder" };
-    private readonly Button _presetMovieButton = new() { Text = "Movie" };
-    private readonly Button _presetMusicButton = new() { Text = "Music" };
-    private readonly Button _presetGameButton = new() { Text = "Game" };
-    private readonly CheckBox _profileAutoSwitch = new() { Text = "Auto-switch by running apps", AutoSize = true };
-    private readonly NumericUpDown _profilePollMs = new() { Minimum = 250, Maximum = 5000, DecimalPlaces = 0, Increment = 250, Value = 1000 };
-    private readonly System.Windows.Forms.Timer _profilePollTimer = new();
+    private readonly ComboBox _profileCombo;
+    private readonly Button _profileLoadButton;
+    private readonly Button _profileSaveAsButton;
+    private readonly Button _profileDeleteButton;
+    private readonly Button _profileImportButton;
+    private readonly Button _profileOpenFolderButton;
+    private readonly Button _presetMovieButton;
+    private readonly Button _presetMusicButton;
+    private readonly Button _presetGameButton;
+    private readonly CheckBox _profileAutoSwitch;
+    private readonly NumericUpDown _profilePollMs;
+    private readonly System.Windows.Forms.Timer _profilePollTimer;
 
-    private readonly System.Windows.Forms.Timer _metersTimer = new();
+    private readonly System.Windows.Forms.Timer _metersTimer;
     private readonly ProgressBar[] _musicMeters = new ProgressBar[2];
     private readonly Label[] _musicMeterLabels = new Label[2];
     private readonly Label[] _musicClipLabels = new Label[2];
@@ -98,111 +98,83 @@ public sealed class RouterMainForm : Form
 
     private string? _lastAutoProfileApplied;
 
-    private readonly ComboBox _musicDeviceCombo = new() { DropDownStyle = ComboBoxStyle.DropDownList };
-    private readonly ComboBox _shakerDeviceCombo = new() { DropDownStyle = ComboBoxStyle.DropDownList };
-    private readonly ComboBox _outputDeviceCombo = new() { DropDownStyle = ComboBoxStyle.DropDownList };
+    private readonly ComboBox _musicDeviceCombo;
+    private readonly ComboBox _shakerDeviceCombo;
+    private readonly ComboBox _outputDeviceCombo;
 
-    private readonly ComboBox _latencyInputCombo = new() { DropDownStyle = ComboBoxStyle.DropDownList };
-    private readonly Button _measureLatencyButton = new() { Text = "Measure latency" };
-    private readonly Label _latencyResultLabel = new() { Text = "", AutoSize = true };
+    private readonly ComboBox _latencyInputCombo;
+    private readonly Button _measureLatencyButton;
+    private readonly Label _latencyResultLabel;
 
-    private readonly NumericUpDown _musicGainDb = new() { Minimum = -60, Maximum = 20, DecimalPlaces = 1, Increment = 0.5M };
-    private readonly NumericUpDown _shakerGainDb = new() { Minimum = -60, Maximum = 20, DecimalPlaces = 1, Increment = 0.5M };
-    private readonly NumericUpDown _masterGainDb = new() { Minimum = -60, Maximum = 20, DecimalPlaces = 1, Increment = 0.5M };
+    private readonly NumericUpDown _musicGainDb;
+    private readonly NumericUpDown _shakerGainDb;
+    private readonly NumericUpDown _masterGainDb;
 
-    private readonly CheckBox _musicHpEnable = new() { Text = "Enable", AutoSize = true };
-    private readonly NumericUpDown _musicHpHz = new() { Minimum = 1, Maximum = 300, DecimalPlaces = 1, Increment = 1, Width = 100 };
-    private readonly CheckBox _musicLpEnable = new() { Text = "Enable", AutoSize = true };
-    private readonly NumericUpDown _musicLpHz = new() { Minimum = 5, Maximum = 300, DecimalPlaces = 1, Increment = 1, Width = 100 };
+    private readonly CheckBox _musicHpEnable;
+    private readonly NumericUpDown _musicHpHz;
+    private readonly CheckBox _musicLpEnable;
+    private readonly NumericUpDown _musicLpHz;
 
-    private readonly NumericUpDown _hpHz = new() { Minimum = 1, Maximum = 300, DecimalPlaces = 1, Increment = 1 };
-    private readonly NumericUpDown _lpHz = new() { Minimum = 5, Maximum = 300, DecimalPlaces = 1, Increment = 1 };
+    private readonly NumericUpDown _hpHz;
+    private readonly NumericUpDown _lpHz;
 
-    private readonly ComboBox _mixingModeCombo = new() { DropDownStyle = ComboBoxStyle.DropDownList };
+    private readonly ComboBox _mixingModeCombo;
 
-    private readonly NumericUpDown _latencyMs = new() { Minimum = 10, Maximum = 500, DecimalPlaces = 0, Increment = 5 };
+    private readonly NumericUpDown _latencyMs;
 
-    private readonly ComboBox _sampleRateCombo = new() { DropDownStyle = ComboBoxStyle.DropDownList };
+    private readonly ComboBox _sampleRateCombo;
 
-    private readonly CheckBox _useCenter = new() { Text = "Use Center channel" };
-    private readonly CheckBox _useExclusiveMode = new() { Text = "Use WASAPI Exclusive mode (if supported)" };
+    private readonly CheckBox _useCenter;
+    private readonly CheckBox _useExclusiveMode;
 
-    private readonly Label _mixFormatLabel = new() { Text = "", AutoSize = true };
-    private readonly Label _effectiveFormatLabel = new() { Text = "", AutoSize = true };
-    private readonly Label _formatWarningLabel = new() { Text = "", AutoSize = true };
-    private readonly Button _probeFormatsButton = new() { Text = "Probe exclusive formats" };
-    private readonly Button _toggleBlacklistButton = new() { Text = "Toggle blacklist" };
-    private readonly ListBox _formatList = new() { IntegralHeight = false, Height = 130 };
+    private readonly Label _mixFormatLabel;
+    private readonly Label _effectiveFormatLabel;
+    private readonly Label _formatWarningLabel;
+    private readonly Button _probeFormatsButton;
+    private readonly Button _toggleBlacklistButton;
+    private readonly ListBox _formatList;
 
-    private readonly Button _diagnosticsRefreshButton = new() { Text = "Refresh" };
-    private readonly Button _diagnosticsOpenSoundSettingsButton = new() { Text = "Open Sound settings" };
-    private readonly Button _diagnosticsOpenClassicSoundButton = new() { Text = "Open Sound control panel" };
-    private readonly Button _diagnosticsLaunchVendorButton = new() { Text = "Launch C-Media control panel" };
-    private readonly Label _diagnosticsVendorStatusLabel = new() { Text = "", AutoSize = true };
+    private readonly Button _diagnosticsRefreshButton;
+    private readonly Button _diagnosticsOpenSoundSettingsButton;
+    private readonly Button _diagnosticsOpenClassicSoundButton;
+    private readonly Button _diagnosticsLaunchVendorButton;
+    private readonly Label _diagnosticsVendorStatusLabel;
 
-    private readonly Button _cm6206HidScanButton = new() { Text = "Scan CM6206 HID" };
-    private readonly ComboBox _cm6206HidDeviceCombo = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 360 };
-    private readonly NumericUpDown _cm6206HidRegCount = new() { Minimum = 1, Maximum = 64, DecimalPlaces = 0, Increment = 1, Value = 6, Width = 60 };
-    private readonly Button _cm6206HidReadRegsButton = new() { Text = "Read regs" };
-    private readonly Label _cm6206HidStatusLabel = new() { Text = "", AutoSize = true };
+    private readonly Button _cm6206HidScanButton;
+    private readonly ComboBox _cm6206HidDeviceCombo;
+    private readonly NumericUpDown _cm6206HidRegCount;
+    private readonly Button _cm6206HidReadRegsButton;
+    private readonly Label _cm6206HidStatusLabel;
 
     private string? _cm6206HidLastDump;
-    private readonly TextBox _diagnosticsText = new()
-    {
-        Multiline = true,
-        ReadOnly = true,
-        ScrollBars = ScrollBars.Vertical,
-        Dock = DockStyle.Fill,
-        WordWrap = false
-    };
+    private readonly TextBox _diagnosticsText;
 
-    private readonly DataGridView _routingGrid = new()
-    {
-        Dock = DockStyle.Fill,
-        ReadOnly = true,
-        AllowUserToAddRows = false,
-        AllowUserToDeleteRows = false,
-        AllowUserToResizeRows = false,
-        RowHeadersVisible = false,
-        MultiSelect = false,
-        SelectionMode = DataGridViewSelectionMode.FullRowSelect,
-        AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.DisplayedCells
-    };
+    private readonly DataGridView _routingGrid;
 
-    private readonly StatusStrip _statusStrip = new() { Dock = DockStyle.Bottom };
-    private readonly ToolStripStatusLabel _statusHealth = new() { Text = "" };
-    private readonly ToolStripStatusLabel _statusRouter = new() { Text = "Router: (unknown)" };
-    private readonly ToolStripStatusLabel _statusSpacer1 = new() { Spring = true };
-    private readonly ToolStripStatusLabel _statusFormat = new() { Text = "Format: (unknown)" };
-    private readonly ToolStripStatusLabel _statusSpacer2 = new() { Spring = true };
-    private readonly ToolStripStatusLabel _statusLatency = new() { Text = "Latency: (unknown)" };
-
-    private readonly ToolStripStatusLabel _statusUpdate = new()
-    {
-        Text = "↑",
-        Visible = false,
-        AutoSize = true,
-        ForeColor = NeonTheme.MeterLow,
-        ToolTipText = "Update available"
-    };
-
-    private readonly System.Windows.Forms.Timer _statusTimer = new();
-
-    private readonly ToolStripDropDownButton _statusPreset = new() { Text = "Preset" };
+    private readonly StatusStrip _statusStrip;
+    private readonly ToolStripStatusLabel _statusHealth;
+    private readonly ToolStripStatusLabel _statusRouter;
+    private readonly ToolStripStatusLabel _statusSpacer1;
+    private readonly ToolStripStatusLabel _statusFormat;
+    private readonly ToolStripStatusLabel _statusSpacer2;
+    private readonly ToolStripStatusLabel _statusLatency;
+    private readonly ToolStripStatusLabel _statusUpdate;
+    private readonly System.Windows.Forms.Timer _statusTimer;
+    private readonly ToolStripDropDownButton _statusPreset;
 
     private UpdateInfo? _availableUpdate;
 
     // SÖNDBÖUND console (Routing tab)
-    private readonly NeonMatrixControl _consoleMatrix = new(rows: 6, cols: 2);
-    private readonly NeonMeter _consoleMeterA = new() { Vertical = true, Width = 18, Height = 160 };
-    private readonly NeonMeter _consoleMeterB = new() { Vertical = true, Width = 18, Height = 160 };
+    private readonly NeonMatrixControl _consoleMatrix;
+    private readonly NeonMeter _consoleMeterA;
+    private readonly NeonMeter _consoleMeterB;
 
-    private readonly NeonSlider _consoleMusicGain = new() { Minimum = -600, Maximum = 200, Value = 0, Width = 200 };
-    private readonly Label _consoleMusicGainLabel = new() { Text = "0.0 dB", AutoSize = true };
-    private readonly NeonSlider _consoleShakerGain = new() { Minimum = -600, Maximum = 200, Value = 0, Width = 200 };
-    private readonly Label _consoleShakerGainLabel = new() { Text = "0.0 dB", AutoSize = true };
+    private readonly NeonSlider _consoleMusicGain;
+    private readonly Label _consoleMusicGainLabel;
+    private readonly NeonSlider _consoleShakerGain;
+    private readonly Label _consoleShakerGainLabel;
 
-    private readonly ComboBox _consoleInputMode = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 140 };
+    private readonly ComboBox _consoleInputMode;
 
     private readonly NeonMeter[] _consoleOutMeters = new NeonMeter[8];
     private readonly NeonSlider[] _consoleOutGain = new NeonSlider[8];
@@ -225,30 +197,30 @@ public sealed class RouterMainForm : Form
     private readonly Button _swapSideRearButton;
     private readonly Button _swapCenterLfeButton;
 
-    private readonly Button _refreshButton = new() { Text = "Refresh devices" };
-    private readonly Button _saveButton = new() { Text = "Save config" };
-    private readonly Button _startButton = new() { Text = "Start" };
-    private readonly Button _stopButton = new() { Text = "Stop", Enabled = false };
+    private readonly Button _refreshButton;
+    private readonly Button _saveButton;
+    private readonly Button _startButton;
+    private readonly Button _stopButton;
 
     private RouterConfig _config;
     private WasapiDualRouter? _router;
     private TonePlayer? _tonePlayer;
 
-    private readonly ComboBox _testChannelCombo = new() { DropDownStyle = ComboBoxStyle.DropDownList };
-    private readonly ComboBox _testTypeCombo = new() { DropDownStyle = ComboBoxStyle.DropDownList };
-    private readonly NumericUpDown _testFreq = new() { Minimum = 10, Maximum = 20000, DecimalPlaces = 0, Increment = 10 };
-    private readonly NumericUpDown _testFreqEnd = new() { Minimum = 10, Maximum = 20000, DecimalPlaces = 0, Increment = 10 };
-    private readonly NumericUpDown _testSweepSec = new() { Minimum = 1, Maximum = 60, DecimalPlaces = 1, Increment = 0.5M };
-    private readonly NumericUpDown _testLevelDb = new() { Minimum = -60, Maximum = 0, DecimalPlaces = 1, Increment = 1 };
-    private readonly ComboBox _testPresetCombo = new() { DropDownStyle = ComboBoxStyle.DropDownList };
-    private readonly CheckBox _testVoicePrompts = new() { Text = "Voice prompts", AutoSize = true };
-    private readonly CheckBox _testAutoStep = new() { Text = "Auto-step channels", AutoSize = true };
-    private readonly CheckBox _testLoop = new() { Text = "Loop", AutoSize = true };
-    private readonly NumericUpDown _testStepMs = new() { Minimum = 250, Maximum = 30000, DecimalPlaces = 0, Increment = 250 };
-    private readonly Button _testStartButton = new() { Text = "Start test" };
-    private readonly Button _testStopButton = new() { Text = "Stop test", Enabled = false };
+    private readonly ComboBox _testChannelCombo;
+    private readonly ComboBox _testTypeCombo;
+    private readonly NumericUpDown _testFreq;
+    private readonly NumericUpDown _testFreqEnd;
+    private readonly NumericUpDown _testSweepSec;
+    private readonly NumericUpDown _testLevelDb;
+    private readonly ComboBox _testPresetCombo;
+    private readonly CheckBox _testVoicePrompts;
+    private readonly CheckBox _testAutoStep;
+    private readonly CheckBox _testLoop;
+    private readonly NumericUpDown _testStepMs;
+    private readonly Button _testStartButton;
+    private readonly Button _testStopButton;
 
-    private readonly System.Windows.Forms.Timer _autoStepTimer = new();
+    private readonly System.Windows.Forms.Timer _autoStepTimer;
     private bool _alternateIsSine = true;
 
     private static readonly string[] ChannelNames =
@@ -305,6 +277,138 @@ public sealed class RouterMainForm : Form
         _simpleFlow = new SignalFlowControl { Dock = DockStyle.Top };
         _toolTip = new ToolTip { AutomaticDelay = 200, AutoPopDelay = 6000, ReshowDelay = 200, InitialDelay = 250, ShowAlways = true };
         AppLog.Info("RouterMainForm ctor: simple mode controls ok");
+
+        AppLog.Info("RouterMainForm ctor: init remaining field controls...");
+        _profileCombo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList };
+        _profileLoadButton = new Button { Text = "Load" };
+        _profileSaveAsButton = new Button { Text = "Save As" };
+        _profileDeleteButton = new Button { Text = "Delete" };
+        _profileImportButton = new Button { Text = "Import..." };
+        _profileOpenFolderButton = new Button { Text = "Open folder" };
+        _presetMovieButton = new Button { Text = "Movie" };
+        _presetMusicButton = new Button { Text = "Music" };
+        _presetGameButton = new Button { Text = "Game" };
+        _profileAutoSwitch = new CheckBox { Text = "Auto-switch by running apps", AutoSize = true };
+        _profilePollMs = new NumericUpDown { Minimum = 250, Maximum = 5000, DecimalPlaces = 0, Increment = 250, Value = 1000 };
+        _profilePollTimer = new System.Windows.Forms.Timer();
+
+        _metersTimer = new System.Windows.Forms.Timer();
+
+        _musicDeviceCombo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList };
+        _shakerDeviceCombo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList };
+        _outputDeviceCombo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList };
+
+        _latencyInputCombo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList };
+        _measureLatencyButton = new Button { Text = "Measure latency" };
+        _latencyResultLabel = new Label { Text = "", AutoSize = true };
+
+        _musicGainDb = new NumericUpDown { Minimum = -60, Maximum = 20, DecimalPlaces = 1, Increment = 0.5M };
+        _shakerGainDb = new NumericUpDown { Minimum = -60, Maximum = 20, DecimalPlaces = 1, Increment = 0.5M };
+        _masterGainDb = new NumericUpDown { Minimum = -60, Maximum = 20, DecimalPlaces = 1, Increment = 0.5M };
+
+        _musicHpEnable = new CheckBox { Text = "Enable", AutoSize = true };
+        _musicHpHz = new NumericUpDown { Minimum = 1, Maximum = 300, DecimalPlaces = 1, Increment = 1, Width = 100 };
+        _musicLpEnable = new CheckBox { Text = "Enable", AutoSize = true };
+        _musicLpHz = new NumericUpDown { Minimum = 5, Maximum = 300, DecimalPlaces = 1, Increment = 1, Width = 100 };
+
+        _hpHz = new NumericUpDown { Minimum = 1, Maximum = 300, DecimalPlaces = 1, Increment = 1 };
+        _lpHz = new NumericUpDown { Minimum = 5, Maximum = 300, DecimalPlaces = 1, Increment = 1 };
+
+        _mixingModeCombo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList };
+        _latencyMs = new NumericUpDown { Minimum = 10, Maximum = 500, DecimalPlaces = 0, Increment = 5 };
+        _sampleRateCombo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList };
+        _useCenter = new CheckBox { Text = "Use Center channel" };
+        _useExclusiveMode = new CheckBox { Text = "Use WASAPI Exclusive mode (if supported)" };
+
+        _mixFormatLabel = new Label { Text = "", AutoSize = true };
+        _effectiveFormatLabel = new Label { Text = "", AutoSize = true };
+        _formatWarningLabel = new Label { Text = "", AutoSize = true };
+        _probeFormatsButton = new Button { Text = "Probe exclusive formats" };
+        _toggleBlacklistButton = new Button { Text = "Toggle blacklist" };
+        _formatList = new ListBox { IntegralHeight = false, Height = 130 };
+
+        _diagnosticsRefreshButton = new Button { Text = "Refresh" };
+        _diagnosticsOpenSoundSettingsButton = new Button { Text = "Open Sound settings" };
+        _diagnosticsOpenClassicSoundButton = new Button { Text = "Open Sound control panel" };
+        _diagnosticsLaunchVendorButton = new Button { Text = "Launch C-Media control panel" };
+        _diagnosticsVendorStatusLabel = new Label { Text = "", AutoSize = true };
+
+        _cm6206HidScanButton = new Button { Text = "Scan CM6206 HID" };
+        _cm6206HidDeviceCombo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 360 };
+        _cm6206HidRegCount = new NumericUpDown { Minimum = 1, Maximum = 64, DecimalPlaces = 0, Increment = 1, Value = 6, Width = 60 };
+        _cm6206HidReadRegsButton = new Button { Text = "Read regs" };
+        _cm6206HidStatusLabel = new Label { Text = "", AutoSize = true };
+
+        _diagnosticsText = new TextBox
+        {
+            Multiline = true,
+            ReadOnly = true,
+            ScrollBars = ScrollBars.Vertical,
+            Dock = DockStyle.Fill,
+            WordWrap = false
+        };
+
+        _routingGrid = new DataGridView
+        {
+            Dock = DockStyle.Fill,
+            ReadOnly = true,
+            AllowUserToAddRows = false,
+            AllowUserToDeleteRows = false,
+            AllowUserToResizeRows = false,
+            RowHeadersVisible = false,
+            MultiSelect = false,
+            SelectionMode = DataGridViewSelectionMode.FullRowSelect,
+            AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.DisplayedCells
+        };
+
+        _statusStrip = new StatusStrip { Dock = DockStyle.Bottom };
+        _statusHealth = new ToolStripStatusLabel { Text = "" };
+        _statusRouter = new ToolStripStatusLabel { Text = "Router: (unknown)" };
+        _statusSpacer1 = new ToolStripStatusLabel { Spring = true };
+        _statusFormat = new ToolStripStatusLabel { Text = "Format: (unknown)" };
+        _statusSpacer2 = new ToolStripStatusLabel { Spring = true };
+        _statusLatency = new ToolStripStatusLabel { Text = "Latency: (unknown)" };
+        _statusUpdate = new ToolStripStatusLabel
+        {
+            Text = "↑",
+            Visible = false,
+            AutoSize = true,
+            ForeColor = NeonTheme.MeterLow,
+            ToolTipText = "Update available"
+        };
+        _statusTimer = new System.Windows.Forms.Timer();
+        _statusPreset = new ToolStripDropDownButton { Text = "Preset" };
+
+        _consoleMatrix = new NeonMatrixControl(rows: 6, cols: 2);
+        _consoleMeterA = new NeonMeter { Vertical = true, Width = 18, Height = 160 };
+        _consoleMeterB = new NeonMeter { Vertical = true, Width = 18, Height = 160 };
+        _consoleMusicGain = new NeonSlider { Minimum = -600, Maximum = 200, Value = 0, Width = 200 };
+        _consoleMusicGainLabel = new Label { Text = "0.0 dB", AutoSize = true };
+        _consoleShakerGain = new NeonSlider { Minimum = -600, Maximum = 200, Value = 0, Width = 200 };
+        _consoleShakerGainLabel = new Label { Text = "0.0 dB", AutoSize = true };
+        _consoleInputMode = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 140 };
+
+        _refreshButton = new Button { Text = "Refresh devices" };
+        _saveButton = new Button { Text = "Save config" };
+        _startButton = new Button { Text = "Start" };
+        _stopButton = new Button { Text = "Stop", Enabled = false };
+
+        _testChannelCombo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList };
+        _testTypeCombo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList };
+        _testFreq = new NumericUpDown { Minimum = 10, Maximum = 20000, DecimalPlaces = 0, Increment = 10 };
+        _testFreqEnd = new NumericUpDown { Minimum = 10, Maximum = 20000, DecimalPlaces = 0, Increment = 10 };
+        _testSweepSec = new NumericUpDown { Minimum = 1, Maximum = 60, DecimalPlaces = 1, Increment = 0.5M };
+        _testLevelDb = new NumericUpDown { Minimum = -60, Maximum = 0, DecimalPlaces = 1, Increment = 1 };
+        _testPresetCombo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList };
+        _testVoicePrompts = new CheckBox { Text = "Voice prompts", AutoSize = true };
+        _testAutoStep = new CheckBox { Text = "Auto-step channels", AutoSize = true };
+        _testLoop = new CheckBox { Text = "Loop", AutoSize = true };
+        _testStepMs = new NumericUpDown { Minimum = 250, Maximum = 30000, DecimalPlaces = 0, Increment = 250 };
+        _testStartButton = new Button { Text = "Start test" };
+        _testStopButton = new Button { Text = "Stop test", Enabled = false };
+        _autoStepTimer = new System.Windows.Forms.Timer();
+
+        AppLog.Info("RouterMainForm ctor: remaining field controls ok");
 
         _aiCopilot = new AiCopilotService(new OpenAiClient(new HttpClient()));
         _configPath = configPath;

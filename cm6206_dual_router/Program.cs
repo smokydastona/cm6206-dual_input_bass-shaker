@@ -87,6 +87,16 @@ internal static class Program
                 AppLog.Info("Launching WinForms UI...");
                 ApplicationConfiguration.Initialize();
                 AppLog.Info("Creating RouterMainForm...");
+
+                // If the app hangs before RouterMainForm ctor logs, we need to know whether
+                // WinForms itself can construct a basic Form on this machine.
+                AppLog.Info("Creating WinForms smoke-test Form...");
+                using (var smoke = new Form())
+                {
+                    smoke.Text = "(smoke)";
+                }
+                AppLog.Info("Smoke-test Form created OK.");
+
                 var form = new RouterMainForm(configPath);
                 AppLog.Info("RouterMainForm created; entering Application.Run...");
                 Application.Run(form);
