@@ -17,6 +17,49 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Compute version
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          $runNumber = [int]'${{ github.run_number }}'
+          $sha = '${{ github.sha }}'
+          $shortSha = if ($sha.Length -ge 7) { $sha.Substring(0, 7) } else { $sha }
+
+          $refType = '${{ github.ref_type }}'
+          $refName = '${{ github.ref_name }}'
+
+          if ($refType -eq 'tag' -and $refName.StartsWith('v')) {
+            $tagVersion = $refName.Substring(1)
+            if ($tagVersion -notmatch '^\d+\.\d+\.\d+(\.\d+)?$') {
+              throw "Tag '$refName' must be v<major>.<minor>.<patch>[.<revision>]"
+            }
+
+            $parts = $tagVersion.Split('.')
+            if ($parts.Count -eq 3) { $parts = @($parts[0], $parts[1], $parts[2], '0') }
+
+            $appVersion = ($parts[0..2] -join '.')
+            $assemblyVersion = ($parts -join '.')
+            $fileVersion = $assemblyVersion
+            $informational = "$appVersion+tag.$refName"
+          } else {
+            # Auto-increment per workflow run for non-tag builds
+            $appVersion = "1.0.$runNumber"
+            $assemblyVersion = "1.0.$runNumber.0"
+            $fileVersion = $assemblyVersion
+            $informational = "$appVersion+sha.$shortSha"
+          }
+
+          "APP_VERSION=$appVersion" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "ASSEMBLY_VERSION=$assemblyVersion" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "FILE_VERSION=$fileVersion" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "INFORMATIONAL_VERSION=$informational" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+          Write-Host "Version: APP_VERSION=$appVersion"
+          Write-Host "         ASSEMBLY_VERSION=$assemblyVersion"
+          Write-Host "         FILE_VERSION=$fileVersion"
+          Write-Host "         INFORMATIONAL_VERSION=$informational"
+
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
@@ -29,17 +72,22 @@ jobs:
         run: dotnet build "cm6206_dual_router/Cm6206DualRouter.csproj" -c Release --no-restore
 
       - name: Publish (self-contained single file)
-        run: >
-          dotnet publish "cm6206_dual_router/Cm6206DualRouter.csproj"
-          -c Release
-          -r win-x64
-          --self-contained true
-          /p:PublishSingleFile=true
-          /p:IncludeNativeLibrariesForSelfExtract=true
-          /p:PublishReadyToRun=true
-          /p:DebugType=None
-          /p:DebugSymbols=false
-          -o "artifacts/cm6206_dual_router_win-x64"
+        shell: pwsh
+        run: |
+          dotnet publish "cm6206_dual_router/Cm6206DualRouter.csproj" `
+            -c Release `
+            -r win-x64 `
+            --self-contained true `
+            /p:PublishSingleFile=true `
+            /p:IncludeNativeLibrariesForSelfExtract=true `
+            /p:PublishReadyToRun=true `
+            /p:DebugType=None `
+            /p:DebugSymbols=false `
+            /p:Version=$env:APP_VERSION `
+            /p:AssemblyVersion=$env:ASSEMBLY_VERSION `
+            /p:FileVersion=$env:FILE_VERSION `
+            /p:InformationalVersion=$env:INFORMATIONAL_VERSION `
+            -o "artifacts/cm6206_dual_router_win-x64"
 
       - name: Sign published EXE (optional)
         shell: pwsh
@@ -96,11 +144,25 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: cm6206_dual_router_win-x64
+          name: cm6206_dual_router_win-x64_${{ env.APP_VERSION }}
           path: artifacts/cm6206_dual_router_win-x64/
+
+      - name: Package ZIP
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $src = Join-Path $PWD 'artifacts/cm6206_dual_router_win-x64'
+          if (-not (Test-Path -LiteralPath $src)) {
+            throw "Publish output not found: $src"
+          }
+
+          $zipPath = Join-Path $PWD ("artifacts/cm6206_dual_router_win-x64_{0}.zip" -f $env:APP_VERSION)
+          if (Test-Path -LiteralPath $zipPath) { Remove-Item -LiteralPath $zipPath -Force }
+          Compress-Archive -Path (Join-Path $src '*') -DestinationPath $zipPath
+          Write-Host "Created: $zipPath"
 
       - name: Create GitHub Release (tags)
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: artifacts/cm6206_dual_router_win-x64/**
+          files: artifacts/cm6206_dual_router_win-x64_${{ env.APP_VERSION }}.zip
