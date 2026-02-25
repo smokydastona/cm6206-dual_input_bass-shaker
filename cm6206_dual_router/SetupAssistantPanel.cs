@@ -42,8 +42,9 @@ internal sealed class SetupAssistantPanel : UserControl
     private readonly Label _hintText = new() { AutoSize = true, ForeColor = NeonTheme.TextPrimary, Padding = new Padding(8, 9, 0, 0) };
     private readonly Button _hintHelp = new() { Text = "Help", Width = 80, Height = 26 };
 
-    private readonly GroupBox _settingsGroup = new() { Text = "AI (Experimental)", Dock = DockStyle.Bottom, Height = 170 };
+    private readonly GroupBox _settingsGroup = new() { Text = "AI (Experimental)", Dock = DockStyle.Bottom, Height = 195 };
     private readonly CheckBox _enableAi = new() { Text = "Enable AI Copilot", AutoSize = true };
+    private readonly CheckBox _enableProactiveHints = new() { Text = "Show proactive hints (status monitoring)", AutoSize = true };
     private readonly TextBox _apiKey = new() { Width = 230, UseSystemPasswordChar = true };
     private readonly TextBox _model = new() { Width = 230 };
     private readonly Button _saveSettings = new() { Text = "Save", Width = 80 };
@@ -138,7 +139,7 @@ internal sealed class SetupAssistantPanel : UserControl
         {
             Dock = DockStyle.Fill,
             ColumnCount = 2,
-            RowCount = 4,
+            RowCount = 5,
             Padding = new Padding(10),
             AutoSize = true
         };
@@ -149,16 +150,19 @@ internal sealed class SetupAssistantPanel : UserControl
         grid.Controls.Add(_enableAi, 0, 0);
         grid.SetColumnSpan(_enableAi, 2);
 
-        grid.Controls.Add(new Label { Text = "OpenAI API Key", AutoSize = true, Padding = new Padding(0, 6, 8, 0) }, 0, 1);
-        grid.Controls.Add(_apiKey, 1, 1);
+        grid.Controls.Add(_enableProactiveHints, 0, 1);
+        grid.SetColumnSpan(_enableProactiveHints, 2);
 
-        grid.Controls.Add(new Label { Text = "Model", AutoSize = true, Padding = new Padding(0, 6, 8, 0) }, 0, 2);
-        grid.Controls.Add(_model, 1, 2);
+        grid.Controls.Add(new Label { Text = "OpenAI API Key", AutoSize = true, Padding = new Padding(0, 6, 8, 0) }, 0, 2);
+        grid.Controls.Add(_apiKey, 1, 2);
+
+        grid.Controls.Add(new Label { Text = "Model", AutoSize = true, Padding = new Padding(0, 6, 8, 0) }, 0, 3);
+        grid.Controls.Add(_model, 1, 3);
 
         var row = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, FlowDirection = FlowDirection.LeftToRight, WrapContents = false };
         row.Controls.Add(_saveSettings);
         row.Controls.Add(_costNote);
-        grid.Controls.Add(row, 0, 3);
+        grid.Controls.Add(row, 0, 4);
         grid.SetColumnSpan(row, 2);
 
         _enableAi.CheckedChanged += (_, _) =>
@@ -166,7 +170,18 @@ internal sealed class SetupAssistantPanel : UserControl
             _settings = _settings with { Enabled = _enableAi.Checked };
             SaveSettings?.Invoke(_settings);
             Append(_settings.Enabled ? "AI Copilot enabled." : "AI Copilot disabled.");
+            if (!_settings.Enabled)
+                HideHint();
             StartFirstRunIfNeeded();
+        };
+
+        _enableProactiveHints.CheckedChanged += (_, _) =>
+        {
+            _settings = _settings with { ProactiveHintsEnabled = _enableProactiveHints.Checked };
+            SaveSettings?.Invoke(_settings);
+            if (!_settings.ProactiveHintsEnabled)
+                HideHint();
+            Append(_settings.ProactiveHintsEnabled ? "Proactive hints enabled." : "Proactive hints disabled.");
         };
 
         _saveSettings.Click += (_, _) =>
@@ -319,6 +334,7 @@ internal sealed class SetupAssistantPanel : UserControl
     {
         _settings = settings;
         _enableAi.Checked = settings.Enabled;
+        _enableProactiveHints.Checked = settings.ProactiveHintsEnabled;
         _model.Text = settings.Model;
         _apiKey.Text = "";
         _apiKey.PlaceholderText = string.IsNullOrWhiteSpace(settings.EncryptedApiKey)
@@ -335,7 +351,7 @@ internal sealed class SetupAssistantPanel : UserControl
     public void UpdateSnapshot(CopilotContext ctx)
     {
         // Keep this non-intrusive: only show a hint when something is clearly wrong.
-        if (!_settings.Enabled)
+        if (!_settings.ProactiveHintsEnabled)
         {
             HideHint();
             return;
@@ -618,16 +634,19 @@ internal sealed class SetupAssistantPanel : UserControl
             sb.AppendLine($"- Set output device: {_chosenOutput}");
 
         if (_purpose == "music")
-            sb.AppendLine("- Apply preset: Music Clean");
+            sb.AppendLine("- Apply preset: Game Only");
         else if (_purpose == "experiment")
             sb.AppendLine("- Enable Advanced Controls");
         else
             sb.AppendLine("- Apply preset: Game + Bass Shaker");
 
-        if (_shakerMode == "gamesOnly")
-            sb.AppendLine("- Route shaker from Game Source only");
-        else
-            sb.AppendLine("- Route shaker from all sources");
+        if (_purpose != "experiment")
+        {
+            if (_shakerMode == "gamesOnly")
+                sb.AppendLine("- Route shaker from Game Source only");
+            else
+                sb.AppendLine("- Route shaker from all sources");
+        }
 
         sb.AppendLine("Nothing changes until you click Apply.");
         return sb.ToString().TrimEnd();
@@ -640,14 +659,19 @@ internal sealed class SetupAssistantPanel : UserControl
             actions.Add(new CopilotAction("set_output_device", StringValue: _chosenOutput));
 
         if (_purpose == "music")
-            actions.Add(new CopilotAction("apply_simple_preset", StringValue: "Music Clean"));
-        else
-            actions.Add(new CopilotAction("apply_simple_preset", StringValue: "Game + Bass Shaker"));
-
-        if (_purpose == "experiment")
+        {
+            actions.Add(new CopilotAction("apply_simple_preset", StringValue: "Game Only"));
+            actions.Add(new CopilotAction("set_shaker_mode", StringValue: _shakerMode ?? "always"));
+        }
+        else if (_purpose == "experiment")
+        {
             actions.Add(new CopilotAction("show_advanced_controls", BoolValue: true));
-
-        actions.Add(new CopilotAction("set_shaker_mode", StringValue: _shakerMode ?? "always"));
+        }
+        else
+        {
+            actions.Add(new CopilotAction("apply_simple_preset", StringValue: "Game + Bass Shaker"));
+            actions.Add(new CopilotAction("set_shaker_mode", StringValue: _shakerMode ?? "always"));
+        }
         return actions.ToArray();
     }
 

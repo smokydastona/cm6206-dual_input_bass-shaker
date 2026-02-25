@@ -6,12 +6,14 @@ namespace Cm6206DualRouter;
 
 internal sealed record AiSettings(
     bool Enabled,
+    bool ProactiveHintsEnabled,
     string? EncryptedApiKey,
     string Model,
     bool HasSeenFirstRunPrompt)
 {
     public static AiSettings Default => new(
         Enabled: false,
+        ProactiveHintsEnabled: false,
         EncryptedApiKey: null,
         Model: "gpt-4o-mini",
         HasSeenFirstRunPrompt: false);

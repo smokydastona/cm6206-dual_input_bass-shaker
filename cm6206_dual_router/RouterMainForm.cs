@@ -949,11 +949,11 @@ public sealed class RouterMainForm : Form
 
         // Simple presets
         _simplePresetCombo.Items.Clear();
-        _simplePresetCombo.Items.Add("🎮 Game + Bass Shaker (Recommended)");
-        _simplePresetCombo.Items.Add("🎵 Music Clean");
-        _simplePresetCombo.Items.Add("🎮 Game Only");
-        _simplePresetCombo.Items.Add("🪑 Shaker Only (No Speakers)");
-        _simplePresetCombo.Items.Add("🔧 Flat / Debug");
+        _simplePresetCombo.Items.Add("Game + Bass Shaker (Recommended)");
+        _simplePresetCombo.Items.Add("Music Clean");
+        _simplePresetCombo.Items.Add("Game Only");
+        _simplePresetCombo.Items.Add("Shaker Only (No Speakers)");
+        _simplePresetCombo.Items.Add("Flat / Debug");
         _simplePresetCombo.SelectedIndexChanged += (_, _) =>
         {
             if (_suppressConsoleSync) return;
@@ -982,23 +982,23 @@ public sealed class RouterMainForm : Form
         bool[,] matrix = new bool[6, 2];
 
         // Rows: Front, Center, LFE, Rear, Side, Reserved. Cols: A=Game, B=Secondary.
-        if (presetName.StartsWith("🎮 Game + Bass Shaker", StringComparison.OrdinalIgnoreCase))
+        if (presetName.Contains("Game + Bass Shaker", StringComparison.OrdinalIgnoreCase))
         {
             matrix[0, 0] = true; // Front from A
             matrix[2, 0] = true; // LFE from A
             _simplePresetSummary.Text = "Speakers: Game audio • Shaker: Game bass";
         }
-        else if (presetName.StartsWith("🎵 Music Clean", StringComparison.OrdinalIgnoreCase))
+        else if (presetName.Contains("Music Clean", StringComparison.OrdinalIgnoreCase))
         {
             matrix[0, 1] = true; // Front from B
             _simplePresetSummary.Text = "Speakers: Music • Shaker: Off";
         }
-        else if (presetName.StartsWith("🎮 Game Only", StringComparison.OrdinalIgnoreCase))
+        else if (presetName.Contains("Game Only", StringComparison.OrdinalIgnoreCase))
         {
             matrix[0, 0] = true; // Front from A
             _simplePresetSummary.Text = "Speakers: Game audio • Shaker: Off";
         }
-        else if (presetName.StartsWith("🪑 Shaker Only", StringComparison.OrdinalIgnoreCase))
+        else if (presetName.Contains("Shaker Only", StringComparison.OrdinalIgnoreCase))
         {
             matrix[2, 0] = true; // LFE from A
             _simplePresetSummary.Text = "Speakers: Off • Shaker: Game bass";
@@ -3197,17 +3197,17 @@ public sealed class RouterMainForm : Form
 
         if (!outputSelected)
         {
-            healthText = "❌ Select an output device";
+            healthText = "Error: select an output device";
             healthColor = cErr;
         }
         else if (!outputOk)
         {
-            healthText = "❌ Output device disconnected";
+            healthText = "Error: output device disconnected";
             healthColor = cErr;
         }
         else if (!string.IsNullOrWhiteSpace(_lastStartError) && !running)
         {
-            healthText = $"❌ {_lastStartError}";
+            healthText = $"Error: {_lastStartError}";
             healthColor = cErr;
         }
         else if (!running)
@@ -3217,12 +3217,12 @@ public sealed class RouterMainForm : Form
         }
         else if (!gameDetected)
         {
-            healthText = "⚠ Routing active – no audio from Game Source";
+            healthText = "Warning: routing active – no audio from Game Source";
             healthColor = cWarn;
         }
         else
         {
-            healthText = "✅ Routing active – audio detected";
+            healthText = "OK: routing active – audio detected";
             healthColor = cOk;
         }
 

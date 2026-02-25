@@ -97,6 +97,9 @@ internal sealed class AiCopilotService
             "- You may explain what the user is seeing, ask clarifying setup questions, recommend presets, detect misconfiguration, and suggest existing UI actions.\n" +
             "- You may NOT invent features, invent DSP chains, change low-level routing silently, or give freeform audio-engineering advice.\n" +
             "- Never use emojis. Be calm and technical.\n\n" +
+            "Channel mapping (for set_channel_mute intValue 0-7):\n" +
+            "0=FL, 1=FR, 2=FC, 3=LFE, 4=BL, 5=BR, 6=SL, 7=SR.\n" +
+            "Terminology note: 'rear speakers' is ambiguous (Back BL/BR vs Side SL/SR).\n\n" +
             "Output format: JSON object only. Do not include markdown.\n" +
             "Keys:\n" +
             "- assistantText: string\n" +
@@ -120,6 +123,7 @@ internal sealed class AiCopilotService
             "- set_channel_mute (intValue = channel index 0-7, boolValue = mute)\n\n" +
             "Rules:\n" +
             "- If the request is ambiguous, ask ONE clarificationQuestion with 2-3 clarificationOptions and proposeActions must be empty.\n" +
+                "- If the user says 'rear speakers'/'rear channels', ask whether they mean Back (BL/BR) or Side (SL/SR). Use clarificationOptions: ['Back (BL/BR)', 'Side (SL/SR)', 'Both']. proposeActions must be empty.\n" +
             "- Otherwise proposeActions should be the smallest set of changes needed.\n";
     }
 
