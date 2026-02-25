@@ -49,6 +49,8 @@ public sealed class RouterConfig
     // - Dedicated: Front L/R = Music only; Shaker stays on Rear/Side/LFE
     // - MusicOnly: Output contains only Music (shaker muted everywhere)
     // - ShakerOnly: Output contains only Shaker (music muted everywhere)
+    // - PriorityMusic: Switch between MusicOnly/ShakerOnly, biasing toward Music
+    // - PriorityShaker: Switch between MusicOnly/ShakerOnly, biasing toward Shaker
     [JsonPropertyName("mixingMode")]
     public string MixingMode { get; set; } = "FrontBoth";
 
@@ -176,8 +178,8 @@ public sealed class RouterConfig
             throw new InvalidOperationException("masterGainDb is out of range (-120..24)");
 
         var mode = (MixingMode ?? "FrontBoth").Trim();
-        if (mode is not ("FrontBoth" or "Dedicated" or "MusicOnly" or "ShakerOnly"))
-            throw new InvalidOperationException("mixingMode must be one of: FrontBoth, Dedicated, MusicOnly, ShakerOnly");
+        if (mode is not ("FrontBoth" or "Dedicated" or "MusicOnly" or "ShakerOnly" or "PriorityMusic" or "PriorityShaker"))
+            throw new InvalidOperationException("mixingMode must be one of: FrontBoth, Dedicated, MusicOnly, ShakerOnly, PriorityMusic, PriorityShaker");
 
         if (ChannelGainsDb is not null && ChannelGainsDb.Length != 8)
             throw new InvalidOperationException("channelGainsDb must be an array of 8 floats (FL,FR,FC,LFE,BL,BR,SL,SR)");
@@ -199,6 +201,18 @@ public sealed class RouterConfig
             throw new InvalidOperationException("channelInvert must be an array of 8 bools");
         if (ChannelSolo is not null && ChannelSolo.Length != 8)
             throw new InvalidOperationException("channelSolo must be an array of 8 bools");
+
+        if (MusicHighPassHz is not null)
+        {
+            if (MusicHighPassHz <= 0 || MusicHighPassHz > 300)
+                throw new InvalidOperationException("musicHighPassHz is out of range (0..300]");
+        }
+
+        if (MusicLowPassHz is not null)
+        {
+            if (MusicLowPassHz <= 0 || MusicLowPassHz > 300)
+                throw new InvalidOperationException("musicLowPassHz is out of range (0..300]");
+        }
 
         if (MusicHighPassHz is not null && MusicLowPassHz is not null)
         {

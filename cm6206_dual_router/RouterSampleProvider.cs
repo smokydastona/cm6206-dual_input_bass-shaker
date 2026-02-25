@@ -40,6 +40,12 @@ public sealed class RouterSampleProvider : ISampleProvider
     private readonly BiQuadFilter? _musicLpL;
     private readonly BiQuadFilter? _musicLpR;
 
+    // Priority switching state (read-only, computed on the audio thread).
+    private bool _priorityUseMusic;
+    private float _musicEnv;
+    private float _shakerEnv;
+    private readonly float _envDecay;
+
     public RouterSampleProvider(
         ISampleProvider musicStereo,
         ISampleProvider shakerStereo,
@@ -107,6 +113,14 @@ public sealed class RouterSampleProvider : ISampleProvider
             _musicLpL = BiQuadFilter.LowPassFilter(_sampleRate, config.MusicLowPassHz.Value, 0.707f);
             _musicLpR = BiQuadFilter.LowPassFilter(_sampleRate, config.MusicLowPassHz.Value, 0.707f);
         }
+
+        var mode = (config.MixingMode ?? "FrontBoth").Trim();
+        _priorityUseMusic = mode.Equals("PriorityMusic", StringComparison.OrdinalIgnoreCase);
+        _musicEnv = 0f;
+        _shakerEnv = 0f;
+        // Peak envelope decay (~150ms time constant)
+        var tauSec = 0.15f;
+        _envDecay = (float)Math.Exp(-1.0 / (tauSec * _sampleRate));
     }
 
     public WaveFormat WaveFormat { get; }
@@ -173,6 +187,40 @@ public sealed class RouterSampleProvider : ISampleProvider
                 var isDedicated = mode.Equals("Dedicated", StringComparison.OrdinalIgnoreCase);
                 var isMusicOnly = mode.Equals("MusicOnly", StringComparison.OrdinalIgnoreCase);
                 var isShakerOnly = mode.Equals("ShakerOnly", StringComparison.OrdinalIgnoreCase);
+
+                var isPriorityMusic = mode.Equals("PriorityMusic", StringComparison.OrdinalIgnoreCase);
+                var isPriorityShaker = mode.Equals("PriorityShaker", StringComparison.OrdinalIgnoreCase);
+
+                if (isPriorityMusic || isPriorityShaker)
+                {
+                    // Update simple peak envelopes.
+                    var curMusic = Math.Max(Math.Abs(mL), Math.Abs(mR));
+                    var curShaker = Math.Max(Math.Abs(sL), Math.Abs(sR));
+                    _musicEnv = Math.Max(curMusic, _musicEnv * _envDecay);
+                    _shakerEnv = Math.Max(curShaker, _shakerEnv * _envDecay);
+
+                    // Hysteresis to avoid rapid flipping.
+                    const float ratio = 1.5f; // ~3.5 dB
+                    if (_priorityUseMusic)
+                    {
+                        if (_shakerEnv > _musicEnv * ratio)
+                            _priorityUseMusic = false;
+                    }
+                    else
+                    {
+                        if (_musicEnv > _shakerEnv * ratio)
+                            _priorityUseMusic = true;
+                    }
+
+                    // Bias when envelopes are close.
+                    if (isPriorityMusic && _musicEnv >= _shakerEnv)
+                        _priorityUseMusic = true;
+                    if (isPriorityShaker && _shakerEnv >= _musicEnv)
+                        _priorityUseMusic = false;
+
+                    isMusicOnly = _priorityUseMusic;
+                    isShakerOnly = !_priorityUseMusic;
+                }
 
                 if (isMusicOnly) { sL = 0f; sR = 0f; }
                 if (isShakerOnly) { mL = 0f; mR = 0f; }

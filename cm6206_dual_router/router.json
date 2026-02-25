@@ -10,12 +10,15 @@
 
   "musicGainDb": 0.0,
   "shakerGainDb": 0.0,
+  "masterGainDb": 0.0,
 
   "shakerHighPassHz": 20.0,
   "shakerLowPassHz": 80.0,
 
   "musicHighPassHz": null,
   "musicLowPassHz": null,
+
+  "mixingMode": "FrontBoth",
 
   "lfeGainDb": -6.0,
   "rearGainDb": 0.0,

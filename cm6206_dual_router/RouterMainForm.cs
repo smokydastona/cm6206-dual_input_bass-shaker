@@ -17,6 +17,9 @@ public sealed class RouterMainForm : Form
     private readonly Button _profileDeleteButton = new() { Text = "Delete" };
     private readonly Button _profileImportButton = new() { Text = "Import..." };
     private readonly Button _profileOpenFolderButton = new() { Text = "Open folder" };
+    private readonly Button _presetMovieButton = new() { Text = "Movie" };
+    private readonly Button _presetMusicButton = new() { Text = "Music" };
+    private readonly Button _presetGameButton = new() { Text = "Game" };
     private readonly CheckBox _profileAutoSwitch = new() { Text = "Auto-switch by running apps", AutoSize = true };
     private readonly NumericUpDown _profilePollMs = new() { Minimum = 250, Maximum = 5000, DecimalPlaces = 0, Increment = 250, Value = 1000 };
     private readonly System.Windows.Forms.Timer _profilePollTimer = new();
@@ -55,6 +58,11 @@ public sealed class RouterMainForm : Form
     private readonly NumericUpDown _musicGainDb = new() { Minimum = -60, Maximum = 20, DecimalPlaces = 1, Increment = 0.5M };
     private readonly NumericUpDown _shakerGainDb = new() { Minimum = -60, Maximum = 20, DecimalPlaces = 1, Increment = 0.5M };
     private readonly NumericUpDown _masterGainDb = new() { Minimum = -60, Maximum = 20, DecimalPlaces = 1, Increment = 0.5M };
+
+    private readonly CheckBox _musicHpEnable = new() { Text = "Enable", AutoSize = true };
+    private readonly NumericUpDown _musicHpHz = new() { Minimum = 1, Maximum = 300, DecimalPlaces = 1, Increment = 1, Width = 100 };
+    private readonly CheckBox _musicLpEnable = new() { Text = "Enable", AutoSize = true };
+    private readonly NumericUpDown _musicLpHz = new() { Minimum = 5, Maximum = 300, DecimalPlaces = 1, Increment = 1, Width = 100 };
 
     private readonly NumericUpDown _hpHz = new() { Minimum = 1, Maximum = 300, DecimalPlaces = 1, Increment = 1 };
     private readonly NumericUpDown _lpHz = new() { Minimum = 5, Maximum = 300, DecimalPlaces = 1, Increment = 1 };
@@ -109,6 +117,15 @@ public sealed class RouterMainForm : Form
         SelectionMode = DataGridViewSelectionMode.FullRowSelect,
         AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.DisplayedCells
     };
+
+    private readonly StatusStrip _statusStrip = new() { Dock = DockStyle.Bottom };
+    private readonly ToolStripStatusLabel _statusRouter = new() { Text = "Router: (unknown)" };
+    private readonly ToolStripStatusLabel _statusSpacer1 = new() { Spring = true };
+    private readonly ToolStripStatusLabel _statusFormat = new() { Text = "Format: (unknown)" };
+    private readonly ToolStripStatusLabel _statusSpacer2 = new() { Spring = true };
+    private readonly ToolStripStatusLabel _statusLatency = new() { Text = "Latency: (unknown)" };
+
+    private readonly System.Windows.Forms.Timer _statusTimer = new();
 
     private readonly TrackBar[] _channelSliders = new TrackBar[8];
     private readonly Label[] _channelLabels = new Label[8];
@@ -181,10 +198,17 @@ public sealed class RouterMainForm : Form
 
         Controls.Add(tabs);
 
+        _statusStrip.Items.AddRange(new ToolStripItem[] { _statusRouter, _statusSpacer1, _statusFormat, _statusSpacer2, _statusLatency });
+        Controls.Add(_statusStrip);
+
         _autoStepTimer.Tick += (_, _) => AutoStepTick();
         _profilePollTimer.Tick += (_, _) => AutoProfileSwitchTick();
         _metersTimer.Interval = 50;
         _metersTimer.Tick += (_, _) => UpdateMetersTick();
+
+        _statusTimer.Interval = 250;
+        _statusTimer.Tick += (_, _) => UpdateStatusBar();
+        _statusTimer.Enabled = true;
 
         FormClosing += (_, _) =>
         {
@@ -202,6 +226,7 @@ public sealed class RouterMainForm : Form
         RefreshProfilesCombo();
 
         UpdateDiagnostics();
+        UpdateStatusBar();
     }
 
     private TabPage BuildRoutingTab()
@@ -227,6 +252,7 @@ public sealed class RouterMainForm : Form
         if (_routingGrid.Columns.Count == 0)
         {
             _routingGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Out", HeaderText = "Out" });
+            _routingGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Inputs", HeaderText = "Inputs →" });
             _routingGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Map", HeaderText = "Out <- Raw" });
             _routingGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "RawDef", HeaderText = "Raw channel definition" });
             _routingGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Gains", HeaderText = "Gains" });
@@ -435,6 +461,9 @@ public sealed class RouterMainForm : Form
         _profileCombo.Width = 240;
         profileRow.Controls.Add(_profileCombo);
         profileRow.Controls.Add(_profileLoadButton);
+        profileRow.Controls.Add(_presetMovieButton);
+        profileRow.Controls.Add(_presetMusicButton);
+        profileRow.Controls.Add(_presetGameButton);
         profileRow.Controls.Add(_profileSaveAsButton);
         profileRow.Controls.Add(_profileDeleteButton);
         profileRow.Controls.Add(_profileImportButton);
@@ -469,6 +498,9 @@ public sealed class RouterMainForm : Form
         _stopButton.Click += (_, _) => StopRouter();
 
         _profileLoadButton.Click += (_, _) => LoadSelectedProfileIntoUi();
+        _presetMovieButton.Click += (_, _) => LoadNamedProfileIntoUi("Movie Mode");
+        _presetMusicButton.Click += (_, _) => LoadNamedProfileIntoUi("Music Mode");
+        _presetGameButton.Click += (_, _) => LoadNamedProfileIntoUi("Game Mode");
         _profileSaveAsButton.Click += (_, _) => SaveCurrentAsNewProfile();
         _profileDeleteButton.Click += (_, _) => DeleteSelectedProfile();
         _profileImportButton.Click += (_, _) => ImportProfileFile();
@@ -904,6 +936,31 @@ public sealed class RouterMainForm : Form
         ApplyProfileConfigToUi(profile);
     }
 
+    private void LoadNamedProfileIntoUi(string profileName)
+    {
+        try
+        {
+            RefreshProfilesCombo();
+
+            var match = _profileCombo.Items
+                .OfType<string>()
+                .FirstOrDefault(s => string.Equals(s, profileName, StringComparison.OrdinalIgnoreCase));
+
+            if (match is null)
+            {
+                MessageBox.Show(this, $"Preset profile '{profileName}' not found.", "Preset", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            _profileCombo.SelectedItem = match;
+            LoadSelectedProfileIntoUi();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, ex.Message, "Preset load failed", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
     private void ApplyProfileConfigToUi(RouterProfile profile)
     {
         // Apply ONLY the allowed scope (not devices).
@@ -1051,8 +1108,23 @@ public sealed class RouterMainForm : Form
         _mixingModeCombo.Items.Add("A+B (Front = Music + Shaker)");
         _mixingModeCombo.Items.Add("A only (Music only)");
         _mixingModeCombo.Items.Add("B only (Shaker only)");
+        _mixingModeCombo.Items.Add("Priority switch (prefer Music)");
+        _mixingModeCombo.Items.Add("Priority switch (prefer Shaker)");
         _mixingModeCombo.Items.Add("Dedicated (Front = Music only; Shaker = Rear/Side/LFE)");
         layout.Controls.Add(_mixingModeCombo, 1, 5);
+
+        // Optional music filters
+        layout.Controls.Add(new Label { Text = "Music high-pass (Hz)", AutoSize = true }, 0, 11);
+        var mhp = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, FlowDirection = FlowDirection.LeftToRight, WrapContents = false };
+        mhp.Controls.Add(_musicHpEnable);
+        mhp.Controls.Add(_musicHpHz);
+        layout.Controls.Add(mhp, 1, 11);
+
+        layout.Controls.Add(new Label { Text = "Music low-pass (Hz)", AutoSize = true }, 0, 12);
+        var mlp = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, FlowDirection = FlowDirection.LeftToRight, WrapContents = false };
+        mlp.Controls.Add(_musicLpEnable);
+        mlp.Controls.Add(_musicLpHz);
+        layout.Controls.Add(mlp, 1, 12);
 
         layout.Controls.Add(new Label { Text = "Latency (ms)", AutoSize = true }, 0, 6);
         layout.Controls.Add(_latencyMs, 1, 6);
@@ -1437,6 +1509,9 @@ public sealed class RouterMainForm : Form
         temp.ShakerGainDb = (float)_shakerGainDb.Value;
         temp.MasterGainDb = (float)_masterGainDb.Value;
 
+        temp.MusicHighPassHz = _musicHpEnable.Checked ? (float)_musicHpHz.Value : null;
+        temp.MusicLowPassHz = _musicLpEnable.Checked ? (float)_musicLpHz.Value : null;
+
         temp.ShakerHighPassHz = (float)_hpHz.Value;
         temp.ShakerLowPassHz = (float)_lpHz.Value;
 
@@ -1444,7 +1519,9 @@ public sealed class RouterMainForm : Form
         {
             1 => "MusicOnly",
             2 => "ShakerOnly",
-            3 => "Dedicated",
+            3 => "PriorityMusic",
+            4 => "PriorityShaker",
+            5 => "Dedicated",
             _ => "FrontBoth"
         };
 
@@ -1490,6 +1567,7 @@ public sealed class RouterMainForm : Form
                 var src = temp.OutputChannelMap?[outCh] ?? outCh;
                 src = Math.Clamp(src, 0, 7);
 
+                var inputs = DescribeInputsForRawChannel(src, temp);
                 var rawDef = DescribeRawChannel(src, temp);
                 var outGainDb = temp.ChannelGainsDb?[outCh] ?? 0f;
                 var gains = $"Master {FormatDb(temp.MasterGainDb)}, Out {FormatDb(outGainDb)}";
@@ -1504,6 +1582,7 @@ public sealed class RouterMainForm : Form
 
                 _routingGrid.Rows.Add(
                     ShortName(outCh),
+                    inputs,
                     $"{ShortName(outCh)} <- {ShortName(src)}",
                     rawDef,
                     gains,
@@ -1524,11 +1603,17 @@ public sealed class RouterMainForm : Form
         var isMusicOnly = mode.Equals("MusicOnly", StringComparison.OrdinalIgnoreCase);
         var isShakerOnly = mode.Equals("ShakerOnly", StringComparison.OrdinalIgnoreCase);
         var isDedicated = mode.Equals("Dedicated", StringComparison.OrdinalIgnoreCase);
+        var isPriority = mode.Equals("PriorityMusic", StringComparison.OrdinalIgnoreCase) || mode.Equals("PriorityShaker", StringComparison.OrdinalIgnoreCase);
 
         string MusicL() => $"MusicL ({FormatDb(cfg.MusicGainDb)})";
         string MusicR() => $"MusicR ({FormatDb(cfg.MusicGainDb)})";
         string ShakerL() => $"ShakerL ({FormatDb(cfg.ShakerGainDb)}, HP {cfg.ShakerHighPassHz:0.#}Hz, LP {cfg.ShakerLowPassHz:0.#}Hz)";
         string ShakerR() => $"ShakerR ({FormatDb(cfg.ShakerGainDb)}, HP {cfg.ShakerHighPassHz:0.#}Hz, LP {cfg.ShakerLowPassHz:0.#}Hz)";
+
+        if (isPriority)
+        {
+            return $"{ShortName(rawCh)} = dynamic (priority switching: {mode})";
+        }
 
         if (isMusicOnly)
         {
@@ -1700,11 +1785,18 @@ public sealed class RouterMainForm : Form
         _hpHz.Value = (decimal)_config.ShakerHighPassHz;
         _lpHz.Value = (decimal)_config.ShakerLowPassHz;
 
+        _musicHpEnable.Checked = _config.MusicHighPassHz is not null;
+        _musicHpHz.Value = (decimal)(_config.MusicHighPassHz ?? 40.0f);
+        _musicLpEnable.Checked = _config.MusicLowPassHz is not null;
+        _musicLpHz.Value = (decimal)(_config.MusicLowPassHz ?? 160.0f);
+
         _mixingModeCombo.SelectedIndex = ((_config.MixingMode ?? "FrontBoth").Trim()) switch
         {
             "MusicOnly" => 1,
             "ShakerOnly" => 2,
-            "Dedicated" => 3,
+            "PriorityMusic" => 3,
+            "PriorityShaker" => 4,
+            "Dedicated" => 5,
             _ => 0
         };
 
@@ -1751,6 +1843,7 @@ public sealed class RouterMainForm : Form
         UpdateVisualMapButtons();
         UpdateFormatInfo();
         UpdateRoutingGrid();
+        UpdateStatusBar();
     }
 
     private void SaveConfigFromControls(bool showSavedDialog = true)
@@ -1764,6 +1857,9 @@ public sealed class RouterMainForm : Form
         _config.ShakerGainDb = (float)_shakerGainDb.Value;
         _config.MasterGainDb = (float)_masterGainDb.Value;
 
+        _config.MusicHighPassHz = _musicHpEnable.Checked ? (float)_musicHpHz.Value : null;
+        _config.MusicLowPassHz = _musicLpEnable.Checked ? (float)_musicLpHz.Value : null;
+
         _config.ShakerHighPassHz = (float)_hpHz.Value;
         _config.ShakerLowPassHz = (float)_lpHz.Value;
 
@@ -1771,7 +1867,9 @@ public sealed class RouterMainForm : Form
         {
             1 => "MusicOnly",
             2 => "ShakerOnly",
-            3 => "Dedicated",
+            3 => "PriorityMusic",
+            4 => "PriorityShaker",
+            5 => "Dedicated",
             _ => "FrontBoth"
         };
 
@@ -1821,6 +1919,36 @@ public sealed class RouterMainForm : Form
 
         UpdateFormatInfo();
         UpdateRoutingGrid();
+        UpdateStatusBar();
+    }
+
+    private static string DescribeInputsForRawChannel(int rawCh, RouterConfig cfg)
+    {
+        var mode = (cfg.MixingMode ?? "FrontBoth").Trim();
+        if (mode.Equals("MusicOnly", StringComparison.OrdinalIgnoreCase))
+            return rawCh is 0 or 1 ? "Music" : "-";
+        if (mode.Equals("ShakerOnly", StringComparison.OrdinalIgnoreCase))
+            return "Shaker";
+        if (mode.Equals("PriorityMusic", StringComparison.OrdinalIgnoreCase) || mode.Equals("PriorityShaker", StringComparison.OrdinalIgnoreCase))
+            return $"Priority ({(mode.Equals("PriorityMusic", StringComparison.OrdinalIgnoreCase) ? "Music" : "Shaker")})";
+
+        if (mode.Equals("Dedicated", StringComparison.OrdinalIgnoreCase))
+            return rawCh is 0 or 1 ? "Music" : "Shaker";
+
+        // FrontBoth
+        return rawCh is 0 or 1 ? "Music + Shaker" : "Shaker";
+    }
+
+    private void UpdateStatusBar()
+    {
+        var running = _router is not null;
+        var outDev = _outputDeviceCombo.SelectedItem as string;
+        var mode = _useExclusiveMode.Checked ? "Exclusive" : "Shared";
+        var sr = running ? _router!.EffectiveSampleRate : GetSelectedSampleRate();
+
+        _statusRouter.Text = running ? "Router: Running" : "Router: Stopped";
+        _statusFormat.Text = $"Output: {(string.IsNullOrWhiteSpace(outDev) ? "(not selected)" : outDev)} | {sr} Hz | {mode}";
+        _statusLatency.Text = $"Latency: {(int)_latencyMs.Value} ms | Mix: {_mixingModeCombo.SelectedItem}";
     }
 
     private void SaveConfigToDisk(bool showSavedDialog)

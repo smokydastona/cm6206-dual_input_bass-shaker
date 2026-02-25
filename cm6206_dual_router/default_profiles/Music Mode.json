@@ -1,0 +1,41 @@
+{
+  "name": "Music Mode",
+  "config": {
+    "sampleRate": 48000,
+    "blacklistedSampleRates": [192000],
+    "outputChannels": 8,
+
+    "musicGainDb": 0.0,
+    "shakerGainDb": 0.0,
+    "masterGainDb": 0.0,
+
+    "shakerHighPassHz": 20.0,
+    "shakerLowPassHz": 120.0,
+
+    "musicHighPassHz": null,
+    "musicLowPassHz": null,
+
+    "mixingMode": "MusicOnly",
+
+    "lfeGainDb": -6.0,
+    "rearGainDb": 0.0,
+    "sideGainDb": 0.0,
+
+    "useCenterChannel": false,
+    "useExclusiveMode": false,
+
+    "enableVoicePrompts": true,
+    "calibrationAutoStep": false,
+    "calibrationPreset": "Manual",
+    "calibrationStepMs": 2000,
+    "calibrationLoop": true,
+
+    "latencyMs": 50,
+
+    "channelGainsDb": [0, 0, 0, 0, 0, 0, 0, 0],
+    "outputChannelMap": [0, 1, 2, 3, 4, 5, 6, 7],
+    "channelMute": [false, false, false, false, false, false, false, false],
+    "channelInvert": [false, false, false, false, false, false, false, false],
+    "channelSolo": [false, false, false, false, false, false, false, false]
+  }
+}
