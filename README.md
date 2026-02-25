@@ -52,6 +52,10 @@ If you want a normal Windows installer (Start menu shortcut, optional desktop ic
 	- The driver step is **best-effort**: `pnputil` may return non-zero for "already installed" and similar cases; setup continues.
 	- Driver install can fail if Windows refuses the driver (signature policy / Secure Boot / incompatible OS).
 
+Driver files source:
+- CI builds use the minimal, installer-focused payload in `cm6206_driver_payload/`.
+- The full vendor bundle under `cm6206_extracted/` remains ignored.
+
 ### Build locally
 Prereqs:
 - .NET 8 SDK (x64)

@@ -1,5 +1,5 @@
-# --- Do not commit vendor driver payloads ---
-# (These files are proprietary/vendor-supplied and also cause long-path issues on Windows)
+# --- Vendor driver bundles ---
+# Keep the full extracted vendor bundle out of git (large, long-path issues).
 cm6206_extracted/
 [CMedia CM6206] Windows USB 7.1 Audio Adapter.zip
 
@@ -23,6 +23,13 @@ codesign_dev/
 *.sys
 *.cat
 *.dll
+
+# Minimal CM6206 driver payload used by the installer (intentionally committed)
+!cm6206_driver_payload/
+!cm6206_driver_payload/**
+!cm6206_driver_payload/**/*.sys
+!cm6206_driver_payload/**/*.cat
+!cm6206_driver_payload/**/*.dll
 
 # --- .NET build outputs ---
 **/bin/

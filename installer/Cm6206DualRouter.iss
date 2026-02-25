@@ -9,7 +9,7 @@
 
 ; NOTE: This .iss lives under installer/, so all repo-root paths must be prefixed with ..\\
 #define PublishDir "..\\artifacts\\cm6206_dual_router_win-x64"
-#define DriverDir "..\\cm6206_extracted\\[CMedia CM6206] Windows USB 7.1 Audio Adapter\\WIN10\\SoftwareDriver\\Driver"
+#define DriverDir "..\\cm6206_driver_payload\\WIN10\\Driver"
 
 #if DirExists(DriverDir)
   #define IncludeDriverPayload 1
