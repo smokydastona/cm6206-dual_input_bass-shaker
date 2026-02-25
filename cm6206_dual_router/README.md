@@ -88,6 +88,9 @@ UI tabs:
 Or run the built exe:
 - `bin\\Release\\net8.0-windows\\Cm6206DualRouter.exe --config router.json`
 
+## Installer builds
+If you want a normal Windows installer (and an optional CM6206 driver install step), see the repo root README for the Inno Setup installer.
+
 ## Notes / limitations
 - Creating new playback devices *from scratch* requires a signed driver. This app instead uses whatever virtual devices you already have (Voicemeeter/VB-CABLE/etc.) and routes them.
 - If you set Windows default output to the `Music` virtual device, normal apps will go there automatically.

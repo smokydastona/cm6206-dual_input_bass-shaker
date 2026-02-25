@@ -37,6 +37,33 @@ Common setup:
 - This repo publishes a self-contained `win-x64` single-file build.
 - On GitHub: **Actions** → latest **build-windows** → download artifact `cm6206_dual_router_win-x64`.
 
+## Installer (recommended)
+If you want a normal Windows installer (Start menu shortcut, optional desktop icon) and an optional step to install the CM6206 driver, use the Inno Setup installer.
+
+### Download (from GitHub Releases)
+- Tag releases include both:
+	- a portable ZIP (`cm6206_dual_router_win-x64_<version>.zip`)
+	- an installer EXE (`Cm6206DualRouterSetup_<version>.exe`)
+
+### What the installer does
+- Installs the app into `Program Files`.
+- Optional task: **Install CM6206 USB 7.1 driver** (runs `pnputil /add-driver ... /install`).
+	- Requires admin (UAC prompt).
+	- The driver step is **best-effort**: `pnputil` may return non-zero for "already installed" and similar cases; setup continues.
+	- Driver install can fail if Windows refuses the driver (signature policy / Secure Boot / incompatible OS).
+
+### Build locally
+Prereqs:
+- .NET 8 SDK (x64)
+- Inno Setup 6
+
+Command:
+- `pwsh scripts/build_installer.ps1 -Version 1.2.3`
+
+Outputs:
+- Published app: `artifacts/cm6206_dual_router_win-x64/`
+- Installer: `artifacts/installer/Cm6206DualRouterSetup_1.2.3.exe`
+
 ### Code signing / “Publisher”
 Windows shows a real **Publisher** in UAC/SmartScreen only when the EXE is **code-signed**.
 
@@ -59,7 +86,7 @@ Self-signed quickstart (dev/testing):
 ### Releases ("tag and push")
 This repo uses **two** GitHub Actions workflows:
 - **Push builds**: build/upload artifacts for `main` and PRs.
-- **Tag releases**: when you push a tag like `v1.2.3`, it builds and creates a GitHub **Release** with a versioned ZIP asset. The app's in-app update checker uses GitHub "latest release".
+- **Tag releases**: when you push a tag like `v1.2.3`, it builds and creates a GitHub **Release** with a versioned ZIP asset and a Setup EXE. The app's in-app update checker uses GitHub "latest release".
 
 Create a release:
 - `git tag v1.2.3`
