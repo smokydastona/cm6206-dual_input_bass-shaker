@@ -137,10 +137,10 @@ internal sealed class NeonToggleButton : Control
             e.Graphics.DrawPath(border, path);
 
         // Text
-        var textColor = Checked ? NeonTheme.TextPrimary : NeonTheme.TextSecondary;
-        using var brush = new SolidBrush(textColor);
-        var fmt = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
-        e.Graphics.DrawString(Text, Font, brush, rect, fmt);
+        var fallbackTextColor = Checked ? NeonTheme.TextPrimary : NeonTheme.TextSecondary;
+        using var fallbackBrush = new SolidBrush(fallbackTextColor);
+        var fallbackFmt = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
+        e.Graphics.DrawString(Text, Font, fallbackBrush, rect, fallbackFmt);
     }
 
     private static GraphicsPath RoundedRect(Rectangle rect, int radius)

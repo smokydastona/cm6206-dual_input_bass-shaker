@@ -126,28 +126,28 @@ internal sealed class NeonSlider : Control
         if (trackImg is not null)
         {
             var trackHeight = 4;
-            var track = new Rectangle(rect.Left + 10, rect.Top + (rect.Height / 2) - (trackHeight / 2), rect.Width - 20, trackHeight);
-            if (track.Width <= 1) return;
+            var assetTrack = new Rectangle(rect.Left + 10, rect.Top + (rect.Height / 2) - (trackHeight / 2), rect.Width - 20, trackHeight);
+            if (assetTrack.Width <= 1) return;
 
-            var t = (Value - Minimum) / (float)Math.Max(1, Maximum - Minimum);
-            t = Math.Clamp(t, 0f, 1f);
+            var valueT = (Value - Minimum) / (float)Math.Max(1, Maximum - Minimum);
+            valueT = Math.Clamp(valueT, 0f, 1f);
 
             // Draw base track
-            AaaAssets.DrawNearestNeighbor(e.Graphics, trackImg, track);
+            AaaAssets.DrawNearestNeighbor(e.Graphics, trackImg, assetTrack);
 
             // Active fill inside bevel (avoid overwriting top/bottom bevel lines)
-            var inner = new Rectangle(track.Left, track.Top + 1, track.Width, Math.Max(1, track.Height - 2));
-            var fillW = (int)Math.Round(inner.Width * t);
+            var innerTrack = new Rectangle(assetTrack.Left, assetTrack.Top + 1, assetTrack.Width, Math.Max(1, assetTrack.Height - 2));
+            var fillW = (int)Math.Round(innerTrack.Width * valueT);
             if (fillW > 0)
             {
-                var fill = new Rectangle(inner.Left, inner.Top, fillW, inner.Height);
+                var fillRect = new Rectangle(innerTrack.Left, innerTrack.Top, fillW, innerTrack.Height);
                 using var fillBrush = new SolidBrush(NeonTheme.NeonCyan);
-                e.Graphics.FillRectangle(fillBrush, fill);
+                e.Graphics.FillRectangle(fillBrush, fillRect);
             }
 
             // Thumb
-            var hx = track.Left + (int)Math.Round(track.Width * t);
-            var thumbRect = new Rectangle(hx - 7, track.Top + (track.Height / 2) - 7, 14, 14);
+            var handleX = assetTrack.Left + (int)Math.Round(assetTrack.Width * valueT);
+            var thumbRect = new Rectangle(handleX - 7, assetTrack.Top + (assetTrack.Height / 2) - 7, 14, 14);
 
             var thumbState = !Enabled ? "disabled" : (_hover || _drag) ? "hover" : "default";
             var thumbImg = AaaAssets.TryGetPng($"slider_thumb_14x14_{thumbState}.png");

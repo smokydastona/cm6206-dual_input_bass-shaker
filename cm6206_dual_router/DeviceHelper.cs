@@ -42,14 +42,16 @@ public static class DeviceHelper
         if (string.IsNullOrWhiteSpace(friendlyName))
             throw new ArgumentException("friendlyName is required", nameof(friendlyName));
 
-        if (string.Equals(friendlyName?.Trim(), DefaultSystemRenderDevice, StringComparison.OrdinalIgnoreCase))
+        var search = friendlyName.Trim();
+
+        if (string.Equals(search, DefaultSystemRenderDevice, StringComparison.OrdinalIgnoreCase))
         {
             using var enumeratorDefault = new MMDeviceEnumerator();
             // Multimedia is the common "default output" for games/desktop audio.
             return enumeratorDefault.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
         }
 
-        if (string.Equals(friendlyName?.Trim(), NoneDevice, StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(search, NoneDevice, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("Device '(None)' cannot be opened as an audio device.");
 
         using var enumerator = new MMDeviceEnumerator();
@@ -60,7 +62,7 @@ public static class DeviceHelper
             return match;
 
         // fallback: contains
-        match = devices.FirstOrDefault(d => d.FriendlyName.Contains(friendlyName.Trim(), StringComparison.OrdinalIgnoreCase));
+        match = devices.FirstOrDefault(d => d.FriendlyName?.Contains(search, StringComparison.OrdinalIgnoreCase) == true);
         if (match is not null)
             return match;
 
@@ -72,6 +74,8 @@ public static class DeviceHelper
         if (string.IsNullOrWhiteSpace(friendlyName))
             throw new ArgumentException("friendlyName is required", nameof(friendlyName));
 
+        var search = friendlyName.Trim();
+
         using var enumerator = new MMDeviceEnumerator();
         var devices = enumerator.EnumerateAudioEndPoints(DataFlow.Capture, DeviceState.Active);
 
@@ -80,7 +84,7 @@ public static class DeviceHelper
             return match;
 
         // fallback: contains
-        match = devices.FirstOrDefault(d => d.FriendlyName.Contains(friendlyName.Trim(), StringComparison.OrdinalIgnoreCase));
+        match = devices.FirstOrDefault(d => d.FriendlyName?.Contains(search, StringComparison.OrdinalIgnoreCase) == true);
         if (match is not null)
             return match;
 

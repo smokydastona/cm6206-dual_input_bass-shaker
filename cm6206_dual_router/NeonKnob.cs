@@ -116,11 +116,11 @@ internal sealed class NeonKnob : Control
         if (rect.Width > 0 && rect.Height > 0)
         {
             // Map value -> sprite frame
-            var t = (Value - Minimum) / Math.Max(1e-6f, (Maximum - Minimum));
-            t = Math.Clamp(t, 0f, 1f);
+            var assetT = (Value - Minimum) / Math.Max(1e-6f, (Maximum - Minimum));
+            assetT = Math.Clamp(assetT, 0f, 1f);
 
             const int frames = 16;
-            var frame = (int)Math.Round(t * (frames - 1));
+            var frame = (int)Math.Round(assetT * (frames - 1));
             frame = Math.Clamp(frame, 0, frames - 1);
 
             var sprite = AaaAssets.TryGetPng("knob_primary_64_rotate_16f.png");
@@ -176,12 +176,12 @@ internal sealed class NeonKnob : Control
             e.Graphics.FillEllipse(bg, cx - outerR, cy - outerR, outerR * 2, outerR * 2);
 
         // Arc
-        var t = (Value - Minimum) / Math.Max(1e-6f, (Maximum - Minimum));
-        t = Math.Clamp(t, 0f, 1f);
+        var arcT = (Value - Minimum) / Math.Max(1e-6f, (Maximum - Minimum));
+        arcT = Math.Clamp(arcT, 0f, 1f);
 
         var startAngle = 135f;
         var sweep = 270f;
-        var sweepAngle = sweep * t;
+        var sweepAngle = sweep * arcT;
 
         using (var arcPen = new Pen(NeonTheme.NeonCyan, 4f) { StartCap = LineCap.Round, EndCap = LineCap.Round })
         {
