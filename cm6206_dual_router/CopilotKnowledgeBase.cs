@@ -24,7 +24,6 @@ internal static class CopilotKnowledgeBase
         ("04_audio_channel_mapping.md", "channels"),
         ("05_ai_copilot_contracts.md", "contracts"),
         ("06_troubleshooting_playbook.md", "troubleshooting"),
-        ("07_minecraft_haptic_engine_overview.md", "minecraft"),
     ];
 
     public static string BuildAppendix(string userCommand, CopilotContext ctx)
@@ -91,13 +90,6 @@ internal static class CopilotKnowledgeBase
                 commandLower.Contains("actions") ||
                 commandLower.Contains("allowed");
 
-            var wantMinecraft =
-                commandLower.Contains("minecraft") ||
-                commandLower.Contains("haptic") ||
-                commandLower.Contains("telemetry") ||
-                commandLower.Contains("websocket") ||
-                commandLower.Contains("udp");
-
             var selected = new List<string>();
 
             // Selection order matters: put the highest-utility excerpts first.
@@ -107,7 +99,6 @@ internal static class CopilotKnowledgeBase
             if (wantChannels) selected.Add("04_audio_channel_mapping.md");
             if (wantArchitecture) selected.Add("01_architecture_cm6206_dual_router.md");
             if (wantContracts) selected.Add("05_ai_copilot_contracts.md");
-            if (wantMinecraft) selected.Add("07_minecraft_haptic_engine_overview.md");
 
             // Ensure at least something for first-run general questions.
             if (selected.Count == 0)

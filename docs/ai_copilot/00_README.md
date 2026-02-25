@@ -18,7 +18,6 @@ Scope rules (must not be violated):
 - [04_audio_channel_mapping.md](04_audio_channel_mapping.md): 7.1 channel order + group routing matrix.
 - [05_ai_copilot_contracts.md](05_ai_copilot_contracts.md): Context fields + action allowlist + JSON response contract.
 - [06_troubleshooting_playbook.md](06_troubleshooting_playbook.md): “Why isn’t this working?” checks and fixes.
-- [07_minecraft_haptic_engine_overview.md](07_minecraft_haptic_engine_overview.md): Second app in repo.
 
 ## Maintenance guidance
 Update these docs when:
