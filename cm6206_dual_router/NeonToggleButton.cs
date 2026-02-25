@@ -74,9 +74,39 @@ internal sealed class NeonToggleButton : Control
 
     protected override void OnPaint(PaintEventArgs e)
     {
+        var rect = ClientRectangle;
+        rect.Inflate(-1, -1);
+        if (rect.Width <= 1 || rect.Height <= 1) return;
+
+        // Asset-backed path (preferred)
+        var state = !Enabled ? "disabled" : _pressed ? "pressed" : _hover ? "hover" : "default";
+        var img = AaaAssets.TryGetPng($"button_primary_120x36_{state}.png");
+        if (img is not null)
+        {
+            // Slight depress effect: shift content down a pixel.
+            if (_pressed) rect.Offset(0, 1);
+
+            AaaAssets.DrawNearestNeighbor(e.Graphics, img, rect);
+
+            if (Checked)
+            {
+                var glowRect = rect;
+                glowRect.Inflate(-2, -2);
+                using var overlay = new SolidBrush(Color.FromArgb(40, NeonTheme.NeonCyan));
+                e.Graphics.FillRectangle(overlay, glowRect);
+            }
+
+            // Text on top
+            var textColor = Checked ? NeonTheme.TextPrimary : NeonTheme.TextSecondary;
+            using var brush = new SolidBrush(textColor);
+            var fmt = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
+            e.Graphics.DrawString(Text, Font, brush, rect, fmt);
+            return;
+        }
+
         e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
 
-        var rect = ClientRectangle;
+        rect = ClientRectangle;
         rect.Inflate(-1, -1);
         if (_pressed) rect.Offset(0, 2); // depress
 

@@ -14,6 +14,7 @@ internal sealed class NeonKnob : Control
     private bool _drag;
     private int _dragStartY;
     private float _dragStartValue;
+    private bool _hover;
 
     public float Minimum
     {
@@ -62,6 +63,20 @@ internal sealed class NeonKnob : Control
         BackColor = Color.Transparent;
     }
 
+    protected override void OnMouseEnter(EventArgs e)
+    {
+        base.OnMouseEnter(e);
+        _hover = true;
+        Invalidate();
+    }
+
+    protected override void OnMouseLeave(EventArgs e)
+    {
+        base.OnMouseLeave(e);
+        _hover = false;
+        Invalidate();
+    }
+
     protected override void OnMouseDown(MouseEventArgs e)
     {
         base.OnMouseDown(e);
@@ -96,9 +111,58 @@ internal sealed class NeonKnob : Control
 
     protected override void OnPaint(PaintEventArgs e)
     {
+        // Asset-backed path (preferred)
+        var rect = ClientRectangle;
+        if (rect.Width > 0 && rect.Height > 0)
+        {
+            // Map value -> sprite frame
+            var t = (Value - Minimum) / Math.Max(1e-6f, (Maximum - Minimum));
+            t = Math.Clamp(t, 0f, 1f);
+
+            const int frames = 16;
+            var frame = (int)Math.Round(t * (frames - 1));
+            frame = Math.Clamp(frame, 0, frames - 1);
+
+            var sprite = AaaAssets.TryGetPng("knob_primary_64_rotate_16f.png");
+            if (sprite is not null && sprite.Width >= 64 * frames && sprite.Height >= 64)
+            {
+                var src = AaaAssets.SpriteFrame(frame, 64, 64);
+                AaaAssets.DrawNearestNeighbor(e.Graphics, sprite, rect, src);
+
+                // Small hover/active hint: keep it subtle to avoid fighting the sprite.
+                if (!Enabled)
+                {
+                    using var overlay = new SolidBrush(Color.FromArgb(120, NeonTheme.BgPrimary));
+                    e.Graphics.FillRectangle(overlay, rect);
+                }
+                else if (_drag)
+                {
+                    using var overlay = new SolidBrush(Color.FromArgb(30, NeonTheme.NeonCyan));
+                    e.Graphics.FillRectangle(overlay, rect);
+                }
+                else if (_hover)
+                {
+                    using var overlay = new SolidBrush(Color.FromArgb(20, NeonTheme.NeonPurple));
+                    e.Graphics.FillRectangle(overlay, rect);
+                }
+
+                return;
+            }
+
+            // Fallback to static state images if the sprite sheet isn't present.
+            var state = !Enabled ? "disabled" : _drag ? "active" : _hover ? "hover" : "default";
+            var stateImg = AaaAssets.TryGetPng($"knob_primary_64_{state}.png");
+            if (stateImg is not null)
+            {
+                AaaAssets.DrawNearestNeighbor(e.Graphics, stateImg, rect);
+                return;
+            }
+        }
+
+        // Vector fallback (dev-safe)
         e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
 
-        var rect = ClientRectangle;
+        rect = ClientRectangle;
         rect.Inflate(-1, -1);
 
         var cx = rect.Left + rect.Width / 2f;
