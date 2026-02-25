@@ -54,6 +54,7 @@ public sealed class RouterMainForm : Form
 
     private readonly NumericUpDown _musicGainDb = new() { Minimum = -60, Maximum = 20, DecimalPlaces = 1, Increment = 0.5M };
     private readonly NumericUpDown _shakerGainDb = new() { Minimum = -60, Maximum = 20, DecimalPlaces = 1, Increment = 0.5M };
+    private readonly NumericUpDown _masterGainDb = new() { Minimum = -60, Maximum = 20, DecimalPlaces = 1, Increment = 0.5M };
 
     private readonly NumericUpDown _hpHz = new() { Minimum = 1, Maximum = 300, DecimalPlaces = 1, Increment = 1 };
     private readonly NumericUpDown _lpHz = new() { Minimum = 5, Maximum = 300, DecimalPlaces = 1, Increment = 1 };
@@ -94,6 +95,19 @@ public sealed class RouterMainForm : Form
         ScrollBars = ScrollBars.Vertical,
         Dock = DockStyle.Fill,
         WordWrap = false
+    };
+
+    private readonly DataGridView _routingGrid = new()
+    {
+        Dock = DockStyle.Fill,
+        ReadOnly = true,
+        AllowUserToAddRows = false,
+        AllowUserToDeleteRows = false,
+        AllowUserToResizeRows = false,
+        RowHeadersVisible = false,
+        MultiSelect = false,
+        SelectionMode = DataGridViewSelectionMode.FullRowSelect,
+        AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.DisplayedCells
     };
 
     private readonly TrackBar[] _channelSliders = new TrackBar[8];
@@ -160,6 +174,7 @@ public sealed class RouterMainForm : Form
         tabs.TabPages.Add(BuildDevicesTab());
         tabs.TabPages.Add(BuildDiagnosticsTab());
         tabs.TabPages.Add(BuildDspTab());
+        tabs.TabPages.Add(BuildRoutingTab());
         tabs.TabPages.Add(BuildChannelsTab());
         tabs.TabPages.Add(BuildMetersTab());
         tabs.TabPages.Add(BuildCalibrationTab());
@@ -187,6 +202,43 @@ public sealed class RouterMainForm : Form
         RefreshProfilesCombo();
 
         UpdateDiagnostics();
+    }
+
+    private TabPage BuildRoutingTab()
+    {
+        var page = new TabPage("Routing");
+
+        var root = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 2,
+            Padding = new Padding(12)
+        };
+        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+
+        root.Controls.Add(new Label
+        {
+            Text = "Effective routing visualization (computed from mixing mode, output map, per-channel gain/mute/solo/invert, and master gain).",
+            AutoSize = true
+        }, 0, 0);
+
+        if (_routingGrid.Columns.Count == 0)
+        {
+            _routingGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Out", HeaderText = "Out" });
+            _routingGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Map", HeaderText = "Out <- Raw" });
+            _routingGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "RawDef", HeaderText = "Raw channel definition" });
+            _routingGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Gains", HeaderText = "Gains" });
+            _routingGrid.Columns.Add(new DataGridViewCheckBoxColumn { Name = "Mute", HeaderText = "Mute" });
+            _routingGrid.Columns.Add(new DataGridViewCheckBoxColumn { Name = "Solo", HeaderText = "Solo" });
+            _routingGrid.Columns.Add(new DataGridViewCheckBoxColumn { Name = "Invert", HeaderText = "Invert" });
+        }
+
+        root.Controls.Add(_routingGrid, 0, 1);
+
+        page.Controls.Add(root);
+        return page;
     }
 
     private TabPage BuildMetersTab()
@@ -971,7 +1023,7 @@ public sealed class RouterMainForm : Form
         {
             Dock = DockStyle.Fill,
             ColumnCount = 2,
-            RowCount = 15,
+            RowCount = 16,
             Padding = new Padding(12),
             AutoSize = true
         };
@@ -984,34 +1036,39 @@ public sealed class RouterMainForm : Form
         layout.Controls.Add(new Label { Text = "Shaker gain (dB)", AutoSize = true }, 0, 1);
         layout.Controls.Add(_shakerGainDb, 1, 1);
 
-        layout.Controls.Add(new Label { Text = "Shaker high-pass (Hz)", AutoSize = true }, 0, 2);
-        layout.Controls.Add(_hpHz, 1, 2);
+        layout.Controls.Add(new Label { Text = "Master output gain (dB)", AutoSize = true }, 0, 2);
+        layout.Controls.Add(_masterGainDb, 1, 2);
 
-        layout.Controls.Add(new Label { Text = "Shaker low-pass (Hz)", AutoSize = true }, 0, 3);
-        layout.Controls.Add(_lpHz, 1, 3);
+        layout.Controls.Add(new Label { Text = "Shaker high-pass (Hz)", AutoSize = true }, 0, 3);
+        layout.Controls.Add(_hpHz, 1, 3);
 
-        layout.Controls.Add(new Label { Text = "Mixing mode", AutoSize = true }, 0, 4);
+        layout.Controls.Add(new Label { Text = "Shaker low-pass (Hz)", AutoSize = true }, 0, 4);
+        layout.Controls.Add(_lpHz, 1, 4);
+
+        layout.Controls.Add(new Label { Text = "Mixing mode", AutoSize = true }, 0, 5);
         _mixingModeCombo.Width = 360;
         _mixingModeCombo.Items.Clear();
-        _mixingModeCombo.Items.Add("Front = Music + Shaker (default)");
+        _mixingModeCombo.Items.Add("A+B (Front = Music + Shaker)");
+        _mixingModeCombo.Items.Add("A only (Music only)");
+        _mixingModeCombo.Items.Add("B only (Shaker only)");
         _mixingModeCombo.Items.Add("Dedicated (Front = Music only; Shaker = Rear/Side/LFE)");
-        layout.Controls.Add(_mixingModeCombo, 1, 4);
+        layout.Controls.Add(_mixingModeCombo, 1, 5);
 
-        layout.Controls.Add(new Label { Text = "Latency (ms)", AutoSize = true }, 0, 5);
-        layout.Controls.Add(_latencyMs, 1, 5);
+        layout.Controls.Add(new Label { Text = "Latency (ms)", AutoSize = true }, 0, 6);
+        layout.Controls.Add(_latencyMs, 1, 6);
 
-        layout.Controls.Add(new Label { Text = "Preferred sample rate (Hz)", AutoSize = true }, 0, 6);
+        layout.Controls.Add(new Label { Text = "Preferred sample rate (Hz)", AutoSize = true }, 0, 7);
         _sampleRateCombo.Width = 140;
         _sampleRateCombo.Items.Clear();
         foreach (var sr in OutputFormatNegotiator.CandidateSampleRates)
             _sampleRateCombo.Items.Add(sr);
-        layout.Controls.Add(_sampleRateCombo, 1, 6);
+        layout.Controls.Add(_sampleRateCombo, 1, 7);
 
-        layout.Controls.Add(_useCenter, 1, 7);
+        layout.Controls.Add(_useCenter, 1, 8);
 
-        layout.Controls.Add(_useExclusiveMode, 1, 8);
+        layout.Controls.Add(_useExclusiveMode, 1, 9);
 
-        layout.Controls.Add(new Label { Text = "Output format helper", AutoSize = true }, 0, 9);
+        layout.Controls.Add(new Label { Text = "Output format helper", AutoSize = true }, 0, 10);
 
         var helperGroup = new GroupBox { Text = "Probe / warnings", Dock = DockStyle.Fill };
         var helperLayout = new TableLayoutPanel
@@ -1040,7 +1097,7 @@ public sealed class RouterMainForm : Form
         helperLayout.Controls.Add(_formatList, 0, 4);
 
         helperGroup.Controls.Add(helperLayout);
-        layout.Controls.Add(helperGroup, 1, 9);
+        layout.Controls.Add(helperGroup, 1, 10);
 
         page.Controls.Add(layout);
         return page;
@@ -1362,6 +1419,140 @@ public sealed class RouterMainForm : Form
             if (src < 0) src = outCh;
             b.Text = $"{ShortName(outCh)} <- {ShortName(src)}";
         }
+
+        UpdateRoutingGrid();
+    }
+
+    private static string FormatDb(float db)
+    {
+        var sign = db >= 0 ? "+" : "";
+        return $"{sign}{db:0.0} dB";
+    }
+
+    private RouterConfig BuildConfigSnapshotFromControls()
+    {
+        var temp = _config.Clone();
+
+        temp.MusicGainDb = (float)_musicGainDb.Value;
+        temp.ShakerGainDb = (float)_shakerGainDb.Value;
+        temp.MasterGainDb = (float)_masterGainDb.Value;
+
+        temp.ShakerHighPassHz = (float)_hpHz.Value;
+        temp.ShakerLowPassHz = (float)_lpHz.Value;
+
+        temp.MixingMode = _mixingModeCombo.SelectedIndex switch
+        {
+            1 => "MusicOnly",
+            2 => "ShakerOnly",
+            3 => "Dedicated",
+            _ => "FrontBoth"
+        };
+
+        temp.UseCenterChannel = _useCenter.Checked;
+
+        // Channel state from controls (even if not saved yet)
+        var channel = new float[8];
+        var map = new int[8];
+        var mute = new bool[8];
+        var solo = new bool[8];
+        var invert = new bool[8];
+        for (var i = 0; i < 8; i++)
+        {
+            channel[i] = _channelSliders[i].Value / 10.0f;
+            map[i] = _channelMap[i].SelectedIndex < 0 ? i : _channelMap[i].SelectedIndex;
+            mute[i] = _channelMute[i].Checked;
+            solo[i] = _channelSolo[i].Checked;
+            invert[i] = _channelInvert[i].Checked;
+        }
+        temp.ChannelGainsDb = channel;
+        temp.OutputChannelMap = map;
+        temp.ChannelMute = mute;
+        temp.ChannelSolo = solo;
+        temp.ChannelInvert = invert;
+
+        return temp;
+    }
+
+    private void UpdateRoutingGrid()
+    {
+        if (_routingGrid.IsDisposed) return;
+
+        var temp = BuildConfigSnapshotFromControls();
+
+        _routingGrid.SuspendLayout();
+        try
+        {
+            _routingGrid.Rows.Clear();
+
+            var anySolo = temp.ChannelSolo?.Any(s => s) == true;
+            for (var outCh = 0; outCh < 8; outCh++)
+            {
+                var src = temp.OutputChannelMap?[outCh] ?? outCh;
+                src = Math.Clamp(src, 0, 7);
+
+                var rawDef = DescribeRawChannel(src, temp);
+                var outGainDb = temp.ChannelGainsDb?[outCh] ?? 0f;
+                var gains = $"Master {FormatDb(temp.MasterGainDb)}, Out {FormatDb(outGainDb)}";
+
+                var muted = temp.ChannelMute?[outCh] == true;
+                var solo = temp.ChannelSolo?[outCh] == true;
+                var invert = temp.ChannelInvert?[outCh] == true;
+
+                // If any solo is active and this channel isn't soloed, it'll effectively be muted.
+                if (anySolo && !solo)
+                    rawDef += " (solo-gated)";
+
+                _routingGrid.Rows.Add(
+                    ShortName(outCh),
+                    $"{ShortName(outCh)} <- {ShortName(src)}",
+                    rawDef,
+                    gains,
+                    muted,
+                    solo,
+                    invert);
+            }
+        }
+        finally
+        {
+            _routingGrid.ResumeLayout();
+        }
+    }
+
+    private static string DescribeRawChannel(int rawCh, RouterConfig cfg)
+    {
+        var mode = (cfg.MixingMode ?? "FrontBoth").Trim();
+        var isMusicOnly = mode.Equals("MusicOnly", StringComparison.OrdinalIgnoreCase);
+        var isShakerOnly = mode.Equals("ShakerOnly", StringComparison.OrdinalIgnoreCase);
+        var isDedicated = mode.Equals("Dedicated", StringComparison.OrdinalIgnoreCase);
+
+        string MusicL() => $"MusicL ({FormatDb(cfg.MusicGainDb)})";
+        string MusicR() => $"MusicR ({FormatDb(cfg.MusicGainDb)})";
+        string ShakerL() => $"ShakerL ({FormatDb(cfg.ShakerGainDb)}, HP {cfg.ShakerHighPassHz:0.#}Hz, LP {cfg.ShakerLowPassHz:0.#}Hz)";
+        string ShakerR() => $"ShakerR ({FormatDb(cfg.ShakerGainDb)}, HP {cfg.ShakerHighPassHz:0.#}Hz, LP {cfg.ShakerLowPassHz:0.#}Hz)";
+
+        if (isMusicOnly)
+        {
+            return rawCh switch
+            {
+                0 => "FL = " + MusicL(),
+                1 => "FR = " + MusicR(),
+                _ => $"{ShortName(rawCh)} = 0 (MusicOnly)"
+            };
+        }
+
+        // shaker is available in all other modes (including ShakerOnly)
+        return rawCh switch
+        {
+            0 => $"FL = {(isDedicated ? MusicL() : (isShakerOnly ? ShakerL() : $"{MusicL()} + {ShakerL()}"))}",
+            1 => $"FR = {(isDedicated ? MusicR() : (isShakerOnly ? ShakerR() : $"{MusicR()} + {ShakerR()}"))}",
+            2 => cfg.UseCenterChannel ? $"FC = 0.5*({ShakerL()} + {ShakerR()})" : "FC = 0 (center disabled)",
+            3 => $"LFE = 0.5*({ShakerL()} + {ShakerR()}) * {FormatDb(cfg.LfeGainDb)}",
+            4 => $"BL = {ShakerL()} * {FormatDb(cfg.RearGainDb)}",
+            5 => $"BR = {ShakerR()} * {FormatDb(cfg.RearGainDb)}",
+            6 => $"SL = {ShakerL()} * {FormatDb(cfg.SideGainDb)}",
+            7 => $"SR = {ShakerR()} * {FormatDb(cfg.SideGainDb)}",
+            _ => $"{ShortName(rawCh)} = (unknown)"
+        };
     }
 
     private TabPage BuildCalibrationTab()
@@ -1504,13 +1695,16 @@ public sealed class RouterMainForm : Form
 
         _musicGainDb.Value = (decimal)_config.MusicGainDb;
         _shakerGainDb.Value = (decimal)_config.ShakerGainDb;
+        _masterGainDb.Value = (decimal)_config.MasterGainDb;
 
         _hpHz.Value = (decimal)_config.ShakerHighPassHz;
         _lpHz.Value = (decimal)_config.ShakerLowPassHz;
 
         _mixingModeCombo.SelectedIndex = ((_config.MixingMode ?? "FrontBoth").Trim()) switch
         {
-            "Dedicated" => 1,
+            "MusicOnly" => 1,
+            "ShakerOnly" => 2,
+            "Dedicated" => 3,
             _ => 0
         };
 
@@ -1556,6 +1750,7 @@ public sealed class RouterMainForm : Form
 
         UpdateVisualMapButtons();
         UpdateFormatInfo();
+        UpdateRoutingGrid();
     }
 
     private void SaveConfigFromControls(bool showSavedDialog = true)
@@ -1567,13 +1762,16 @@ public sealed class RouterMainForm : Form
 
         _config.MusicGainDb = (float)_musicGainDb.Value;
         _config.ShakerGainDb = (float)_shakerGainDb.Value;
+        _config.MasterGainDb = (float)_masterGainDb.Value;
 
         _config.ShakerHighPassHz = (float)_hpHz.Value;
         _config.ShakerLowPassHz = (float)_lpHz.Value;
 
         _config.MixingMode = _mixingModeCombo.SelectedIndex switch
         {
-            1 => "Dedicated",
+            1 => "MusicOnly",
+            2 => "ShakerOnly",
+            3 => "Dedicated",
             _ => "FrontBoth"
         };
 
@@ -1622,6 +1820,7 @@ public sealed class RouterMainForm : Form
         SaveConfigToDisk(showSavedDialog);
 
         UpdateFormatInfo();
+        UpdateRoutingGrid();
     }
 
     private void SaveConfigToDisk(bool showSavedDialog)

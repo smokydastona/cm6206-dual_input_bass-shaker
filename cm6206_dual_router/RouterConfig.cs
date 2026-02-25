@@ -34,6 +34,10 @@ public sealed class RouterConfig
     [JsonPropertyName("shakerGainDb")]
     public float ShakerGainDb { get; set; } = 0.0f;
 
+    // Global gain applied to all output channels after routing/mapping.
+    [JsonPropertyName("masterGainDb")]
+    public float MasterGainDb { get; set; } = 0.0f;
+
     [JsonPropertyName("shakerHighPassHz")]
     public float ShakerHighPassHz { get; set; } = 20.0f;
 
@@ -41,8 +45,10 @@ public sealed class RouterConfig
     public float ShakerLowPassHz { get; set; } = 80.0f;
 
     // Mixing strategy for how inputs are combined.
-    // - FrontBoth: Front L/R = Music + Shaker (current/default behavior)
+    // - FrontBoth: Front L/R = Music + Shaker (default)
     // - Dedicated: Front L/R = Music only; Shaker stays on Rear/Side/LFE
+    // - MusicOnly: Output contains only Music (shaker muted everywhere)
+    // - ShakerOnly: Output contains only Shaker (music muted everywhere)
     [JsonPropertyName("mixingMode")]
     public string MixingMode { get; set; } = "FrontBoth";
 
@@ -166,9 +172,12 @@ public sealed class RouterConfig
         if (ShakerHighPassHz <= 0 || ShakerLowPassHz <= 0 || ShakerHighPassHz >= ShakerLowPassHz)
             throw new InvalidOperationException("shakerHighPassHz must be >0 and < shakerLowPassHz");
 
+        if (MasterGainDb < -120 || MasterGainDb > 24)
+            throw new InvalidOperationException("masterGainDb is out of range (-120..24)");
+
         var mode = (MixingMode ?? "FrontBoth").Trim();
-        if (mode is not ("FrontBoth" or "Dedicated"))
-            throw new InvalidOperationException("mixingMode must be one of: FrontBoth, Dedicated");
+        if (mode is not ("FrontBoth" or "Dedicated" or "MusicOnly" or "ShakerOnly"))
+            throw new InvalidOperationException("mixingMode must be one of: FrontBoth, Dedicated, MusicOnly, ShakerOnly");
 
         if (ChannelGainsDb is not null && ChannelGainsDb.Length != 8)
             throw new InvalidOperationException("channelGainsDb must be an array of 8 floats (FL,FR,FC,LFE,BL,BR,SL,SR)");

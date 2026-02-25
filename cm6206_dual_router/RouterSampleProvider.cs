@@ -18,6 +18,7 @@ public sealed class RouterSampleProvider : ISampleProvider
 
     private readonly float _musicGain;
     private readonly float _shakerGain;
+    private readonly float _masterGain;
     private readonly float _lfeGain;
     private readonly float _rearGain;
     private readonly float _sideGain;
@@ -57,6 +58,7 @@ public sealed class RouterSampleProvider : ISampleProvider
 
         _musicGain = DbToGain(config.MusicGainDb);
         _shakerGain = DbToGain(config.ShakerGainDb);
+        _masterGain = DbToGain(config.MasterGainDb);
         _lfeGain = DbToGain(config.LfeGainDb);
         _rearGain = DbToGain(config.RearGainDb);
         _sideGain = DbToGain(config.SideGainDb);
@@ -168,8 +170,22 @@ public sealed class RouterSampleProvider : ISampleProvider
                 // - Rear/Side channels carry shaker (distributed)
                 // - LFE gets mono sum of shaker (+ optionally music if you set musicLowPassHz)
                 var mode = (_config.MixingMode ?? "FrontBoth").Trim();
-                var frontL = mode.Equals("Dedicated", StringComparison.OrdinalIgnoreCase) ? mL : (mL + sL);
-                var frontR = mode.Equals("Dedicated", StringComparison.OrdinalIgnoreCase) ? mR : (mR + sR);
+                var isDedicated = mode.Equals("Dedicated", StringComparison.OrdinalIgnoreCase);
+                var isMusicOnly = mode.Equals("MusicOnly", StringComparison.OrdinalIgnoreCase);
+                var isShakerOnly = mode.Equals("ShakerOnly", StringComparison.OrdinalIgnoreCase);
+
+                if (isMusicOnly) { sL = 0f; sR = 0f; }
+                if (isShakerOnly) { mL = 0f; mR = 0f; }
+
+                var frontL = isDedicated ? mL : (mL + sL);
+                var frontR = isDedicated ? mR : (mR + sR);
+
+                // If shaker-only, FrontBoth behavior should still feed shaker to the fronts.
+                if (isShakerOnly)
+                {
+                    frontL = sL;
+                    frontR = sR;
+                }
 
                 var lfe = (sL + sR) * 0.5f * _lfeGain;
 
@@ -208,6 +224,7 @@ public sealed class RouterSampleProvider : ISampleProvider
                     if (_channelMute[outCh]) sample = 0f;
 
                     sample *= _channelGains[outCh];
+                    sample *= _masterGain;
                     buffer[outBase + outCh] = Clamp(sample);
                 }
             }
