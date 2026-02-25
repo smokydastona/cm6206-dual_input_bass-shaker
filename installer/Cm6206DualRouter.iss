@@ -9,6 +9,13 @@
 
 ; NOTE: This .iss lives under installer/, so all repo-root paths must be prefixed with ..\\
 #define PublishDir "..\\artifacts\\cm6206_dual_router_win-x64"
+#define DriverDir "..\\cm6206_extracted\\[CMedia CM6206] Windows USB 7.1 Audio Adapter\\WIN10\\SoftwareDriver\\Driver"
+
+#if DirExists(DriverDir)
+  #define IncludeDriverPayload 1
+#else
+  #define IncludeDriverPayload 0
+#endif
 
 [Setup]
 AppId={{8C3B0A18-5D4A-4C89-8C25-37C67A2ACB48}}
@@ -31,7 +38,9 @@ MinVersion=10.0
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
+#if IncludeDriverPayload
 Name: "install_driver"; Description: "Install CM6206 USB 7.1 driver (recommended)"; Flags: checkedonce
+#endif
 Name: "desktop_icon"; Description: "Create a desktop icon"; Flags: unchecked
 
 [Files]
@@ -39,7 +48,9 @@ Name: "desktop_icon"; Description: "Create a desktop icon"; Flags: unchecked
 Source: "{#PublishDir}\\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion
 
 ; Driver payload (minimal subset needed for pnputil)
-Source: "..\\cm6206_extracted\\[CMedia CM6206] Windows USB 7.1 Audio Adapter\\WIN10\\SoftwareDriver\\Driver\\*"; DestDir: "{tmp}\\cm6206_driver"; Flags: recursesubdirs createallsubdirs deleteafterinstall; Tasks: install_driver
+#if IncludeDriverPayload
+Source: "{#DriverDir}\\*"; DestDir: "{tmp}\\cm6206_driver"; Flags: recursesubdirs createallsubdirs deleteafterinstall; Tasks: install_driver
+#endif
 
 [Run]
 ; Launch the app after install
@@ -50,6 +61,7 @@ Name: "{group}\\{#MyAppName}"; Filename: "{app}\\Cm6206DualRouter.exe"
 Name: "{userdesktop}\\{#MyAppName}"; Filename: "{app}\\Cm6206DualRouter.exe"; Tasks: desktop_icon
 
 [Code]
+#if IncludeDriverPayload
 procedure TryInstallDriverWithPnPUtil();
 var
   InfPath: string;
@@ -82,3 +94,4 @@ begin
   if CurStep = ssPostInstall then
     TryInstallDriverWithPnPUtil();
 end;
+#endif
