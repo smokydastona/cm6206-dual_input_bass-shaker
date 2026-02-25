@@ -7,6 +7,10 @@ internal static class AppLog
 {
     private static readonly object Gate = new();
 
+    private const int MaxLogFiles = 16;
+    private const string LatestLogFileName = "latest.log";
+    private const string LegacyLogFileName = "app.log";
+
     public static string RootDirectory { get; private set; } = string.Empty;
     public static string LogsDirectory { get; private set; } = string.Empty;
     public static string CrashDirectory { get; private set; } = string.Empty;
@@ -26,7 +30,17 @@ internal static class AppLog
             Directory.CreateDirectory(LogsDirectory);
             Directory.CreateDirectory(CrashDirectory);
 
-            LogPath = Path.Combine(LogsDirectory, "app.log");
+            var latestPath = Path.Combine(LogsDirectory, LatestLogFileName);
+            var legacyPath = Path.Combine(LogsDirectory, LegacyLogFileName);
+
+            // One-time migration: older builds wrote to app.log.
+            // If it exists, archive it so we converge on latest.log going forward.
+            if (!File.Exists(latestPath) && File.Exists(legacyPath))
+                RotateExistingLog(legacyPath, LogsDirectory);
+
+            RotateExistingLog(latestPath, LogsDirectory);
+
+            LogPath = latestPath;
 
             Info("==== startup ====");
             Info($"PID={Environment.ProcessId} Thread={Environment.CurrentManagedThreadId}");
@@ -35,6 +49,8 @@ internal static class AppLog
             Info($"CommandLine={Environment.CommandLine}");
             var ver = Assembly.GetEntryAssembly()?.GetName().Version?.ToString() ?? "(unknown)";
             Info($"Version={ver}");
+
+            PruneLogs(LogsDirectory);
         }
         catch
         {
@@ -96,6 +112,161 @@ internal static class AppLog
             }
 
             Debug.WriteLine(line);
+        }
+        catch
+        {
+            // ignore
+        }
+    }
+
+    private static void RotateExistingLog(string currentLogPath, string logsDirectory)
+    {
+        try
+        {
+            if (!File.Exists(currentLogPath))
+                return;
+
+            // Name the archived log by when it was created (user-friendly, stable).
+            var createdLocal = GetBestEffortCreatedLocal(currentLogPath);
+            var stamp = createdLocal.ToString("yyyyMMdd_HHmmss_fff");
+            var baseArchiveName = Path.Combine(logsDirectory, $"{stamp}.log");
+            var archivePath = EnsureUniquePath(baseArchiveName);
+
+            try
+            {
+                File.Move(currentLogPath, archivePath);
+                return;
+            }
+            catch
+            {
+                // If the file is locked (another instance, AV, etc.), fall back to copy+truncate.
+            }
+
+            try
+            {
+                File.Copy(currentLogPath, archivePath, overwrite: false);
+            }
+            catch
+            {
+                // If we can't even copy it, there's nothing more we can safely do.
+                return;
+            }
+
+            try
+            {
+                File.WriteAllText(currentLogPath, string.Empty);
+            }
+            catch
+            {
+                // ignore
+            }
+        }
+        catch
+        {
+            // ignore
+        }
+    }
+
+    private static DateTime GetBestEffortCreatedLocal(string path)
+    {
+        try
+        {
+            var t = File.GetCreationTime(path);
+            if (t.Year >= 2000)
+                return t;
+        }
+        catch
+        {
+            // ignore
+        }
+
+        try
+        {
+            var t = File.GetLastWriteTime(path);
+            if (t.Year >= 2000)
+                return t;
+        }
+        catch
+        {
+            // ignore
+        }
+
+        return DateTime.Now;
+    }
+
+    private static string EnsureUniquePath(string desiredPath)
+    {
+        try
+        {
+            if (!File.Exists(desiredPath))
+                return desiredPath;
+
+            var dir = Path.GetDirectoryName(desiredPath) ?? string.Empty;
+            var file = Path.GetFileNameWithoutExtension(desiredPath);
+            var ext = Path.GetExtension(desiredPath);
+
+            for (var i = 2; i <= 9999; i++)
+            {
+                var candidate = Path.Combine(dir, $"{file}_{i}{ext}");
+                if (!File.Exists(candidate))
+                    return candidate;
+            }
+        }
+        catch
+        {
+            // ignore
+        }
+
+        // Last resort.
+        return desiredPath;
+    }
+
+    private static void PruneLogs(string logsDirectory)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(logsDirectory) || !Directory.Exists(logsDirectory))
+                return;
+
+            var files = Directory.EnumerateFiles(logsDirectory, "*.log")
+                .Select(p =>
+                {
+                    try { return new FileInfo(p); }
+                    catch { return null; }
+                })
+                .Where(f => f is not null)
+                .Cast<FileInfo>()
+                .ToList();
+
+            if (files.Count <= MaxLogFiles)
+                return;
+
+            // Never delete the active latest log.
+            var deletable = files
+                .Where(f => !string.Equals(f.Name, LatestLogFileName, StringComparison.OrdinalIgnoreCase))
+                .OrderBy(f =>
+                {
+                    try { return f.CreationTimeUtc; }
+                    catch { return DateTime.MaxValue; }
+                })
+                .ToList();
+
+            var total = files.Count;
+            foreach (var f in deletable)
+            {
+                if (total <= MaxLogFiles)
+                    break;
+
+                try
+                {
+                    f.Delete();
+                    total--;
+                }
+                catch
+                {
+                    // ignore
+                }
+            }
         }
         catch
         {
