@@ -42,7 +42,6 @@ jobs:
           -o "artifacts/cm6206_dual_router_win-x64"
 
       - name: Sign published EXE (optional)
-        if: ${{ secrets.CODESIGN_PFX_BASE64 != '' && secrets.CODESIGN_PFX_PASSWORD != '' }}
         shell: pwsh
         env:
           CODESIGN_PFX_BASE64: ${{ secrets.CODESIGN_PFX_BASE64 }}
@@ -50,6 +49,12 @@ jobs:
           CODESIGN_TIMESTAMP_URL: ${{ secrets.CODESIGN_TIMESTAMP_URL }}
         run: |
           $ErrorActionPreference = 'Stop'
+
+          if ([string]::IsNullOrWhiteSpace($env:CODESIGN_PFX_BASE64) -or [string]::IsNullOrWhiteSpace($env:CODESIGN_PFX_PASSWORD)) {
+            Write-Host 'Code signing skipped (CODESIGN_PFX_BASE64 / CODESIGN_PFX_PASSWORD not set).'
+            exit 0
+          }
+
           $artifactDir = Join-Path $PWD 'artifacts/cm6206_dual_router_win-x64'
           $exe = Join-Path $artifactDir 'Cm6206DualRouter.exe'
           if (-not (Test-Path -LiteralPath $exe)) {
