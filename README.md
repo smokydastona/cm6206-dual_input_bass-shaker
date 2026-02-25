@@ -40,10 +40,21 @@ Common setup:
 ### Code signing / “Publisher”
 Windows shows a real **Publisher** in UAC/SmartScreen only when the EXE is **code-signed**.
 
+If you use a **self-signed** certificate:
+- It will show your publisher name **only on machines that trust your certificate**.
+- It will NOT automatically remove SmartScreen warnings for other users.
+
 This repo supports optional signing in GitHub Actions if you add these repository secrets:
 - `CODESIGN_PFX_BASE64`: base64-encoded `.pfx`
 - `CODESIGN_PFX_PASSWORD`: password for the `.pfx`
 - (optional) `CODESIGN_TIMESTAMP_URL`: default `http://timestamp.digicert.com`
+
+Self-signed quickstart (dev/testing):
+- Create + export a self-signed code-signing cert:
+	- `pwsh scripts/new-self-signed-codesign-cert.ps1 -SubjectName SmokyDaStona -PfxPassword 'your_password' -TrustForCurrentUser`
+- Convert the `.pfx` to base64 for GitHub Secrets:
+	- `pwsh scripts/pfx-to-base64.ps1 -PfxPath .\codesign_dev\codesign_SmokyDaStona_dev.pfx`
+	- Paste the output into `CODESIGN_PFX_BASE64`
 
 To sign locally (requires Windows SDK SignTool):
 - `pwsh scripts/sign.ps1 -File .\Cm6206DualRouter.exe -PfxPath .\yourcert.pfx -PfxPassword '...'

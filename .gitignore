@@ -15,6 +15,10 @@ cm6206_extracted/
 *.pfx
 *.snk
 
+# Local self-signed cert outputs (dev/testing)
+codesign_dev/
+*.cer
+
 # Driver binaries
 *.sys
 *.cat
