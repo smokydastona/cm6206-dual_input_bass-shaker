@@ -12,6 +12,19 @@ public sealed class RouterMainForm : Form
 {
     private readonly string _configPath;
 
+    private readonly SplitContainer _mainSplit = new()
+    {
+        Dock = DockStyle.Fill,
+        FixedPanel = FixedPanel.Panel2,
+        SplitterWidth = 6
+    };
+
+    private readonly SetupAssistantPanel _assistant = new();
+
+    private AiSettings _aiSettings;
+
+    private readonly AiCopilotService _aiCopilot;
+
     private UiState _uiState;
     private string? _lastStartError;
     private DateTime _lastOutputCheckUtc = DateTime.MinValue;
@@ -246,6 +259,7 @@ public sealed class RouterMainForm : Form
 
     public RouterMainForm(string configPath)
     {
+            _aiCopilot = new AiCopilotService(new OpenAiClient(new HttpClient()));
         _configPath = configPath;
         Text = "CM6206 Dual Router";
         Width = 860;
@@ -258,6 +272,7 @@ public sealed class RouterMainForm : Form
         Font = NeonTheme.CreateBaseFont(13);
 
         _uiState = UiStateStore.Load();
+        _aiSettings = AiSettingsStore.Load();
 
         _config = LoadOrCreateConfigForUi(_configPath);
 
@@ -294,7 +309,11 @@ public sealed class RouterMainForm : Form
         _calibrationPage = BuildCalibrationTab();
 
         RebuildTabs(showAdvanced: _uiState.ShowAdvancedControls);
-        Controls.Add(_tabs);
+        _mainSplit.Panel1.Controls.Add(_tabs);
+        _mainSplit.Panel2.Controls.Add(_assistant);
+        _mainSplit.SplitterDistance = Math.Max(520, Width - 340);
+        _mainSplit.Panel2MinSize = 300;
+        Controls.Add(_mainSplit);
 
         _statusStrip.BackColor = NeonTheme.BgPanel;
         _statusStrip.ForeColor = NeonTheme.TextSecondary;
@@ -302,6 +321,17 @@ public sealed class RouterMainForm : Form
         Controls.Add(_statusStrip);
 
         ApplyNeonTheme(this);
+
+        _assistant.LoadSettings(_aiSettings);
+        _assistant.GetContext = BuildCopilotContext;
+        _assistant.SaveSettings = s =>
+        {
+            _aiSettings = s;
+            AiSettingsStore.Save(_aiSettings);
+        };
+        _assistant.ApplyActionsWithConfirmation = actions => ApplyCopilotActionsWithConfirmation(actions);
+        _assistant.RunAiCommandAsync = RunAiCommandAsync;
+        _assistant.ExplainAsync = ExplainCurrentScreenAsync;
 
         _autoStepTimer.Tick += (_, _) => AutoStepTick();
         _profilePollTimer.Tick += (_, _) => AutoProfileSwitchTick();
@@ -329,6 +359,270 @@ public sealed class RouterMainForm : Form
 
         UpdateDiagnostics();
         UpdateStatusBar();
+    }
+
+    private async Task<CopilotResponse> ExplainCurrentScreenAsync()
+    {
+        var ctx = BuildCopilotContext();
+        var text = $"Explain what I'm seeing on the '{ctx.ActiveTab}' screen and what the next 1-2 actions should be.";
+        return await RunAiCommandAsync(text);
+    }
+
+    private async Task<CopilotResponse> RunAiCommandAsync(string command)
+    {
+        if (!_aiSettings.Enabled)
+        {
+            return new CopilotResponse(
+                AssistantText: "AI Copilot is disabled. Enable it in the AI (Experimental) section.",
+                Clarification: null,
+                ProposedActions: Array.Empty<CopilotAction>());
+        }
+
+        var apiKey = AiSettingsStore.UnprotectApiKey(_aiSettings.EncryptedApiKey);
+        if (string.IsNullOrWhiteSpace(apiKey))
+        {
+            return new CopilotResponse(
+                AssistantText: "No OpenAI API key is configured. Enter your key in AI (Experimental) to use natural-language commands.",
+                Clarification: null,
+                ProposedActions: Array.Empty<CopilotAction>());
+        }
+
+        var model = string.IsNullOrWhiteSpace(_aiSettings.Model) ? AiSettings.Default.Model : _aiSettings.Model;
+        var ctx = BuildCopilotContext();
+
+        try
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(18));
+            return await _aiCopilot.HandleCommandAsync(apiKey, model, ctx, command, cts.Token);
+        }
+        catch (Exception ex)
+        {
+            return new CopilotResponse(
+                AssistantText: ex.Message,
+                Clarification: null,
+                ProposedActions: Array.Empty<CopilotAction>());
+        }
+    }
+
+    private CopilotContext BuildCopilotContext()
+    {
+        var activeTab = _tabs.SelectedTab?.Text ?? "(unknown)";
+        var running = _router is not null;
+        var gameSource = _simpleGameSourceCombo.SelectedItem as string;
+        var secondarySource = _simpleSecondarySourceCombo.SelectedItem as string;
+        var output = _simpleOutputCombo.SelectedItem as string;
+
+        var outDev = _outputDeviceCombo.SelectedItem as string;
+        var outputOk = _cachedOutputOk;
+
+        var speakersEnabled = true;
+        var shakerEnabled = true;
+        if (_config.GroupRouting is { Length: 12 } gr)
+        {
+            speakersEnabled = gr[0] || gr[1];
+            shakerEnabled = gr[2 * 2] || gr[2 * 2 + 1];
+        }
+
+        var gamePeak = Math.Max(_displayMusic[0], _displayMusic[1]);
+        var secPeak = Math.Max(_displayShaker[0], _displayShaker[1]);
+        var outLfe = _displayOut[3];
+        var outMax = 0f;
+        for (var i = 0; i < 8; i++)
+            outMax = Math.Max(outMax, _displayOut[i]);
+
+        return new CopilotContext(
+            ActiveTab: activeTab,
+            RouterRunning: running,
+            GameSource: gameSource,
+            SecondarySource: secondarySource,
+            OutputDevice: string.IsNullOrWhiteSpace(outDev) ? output : outDev,
+            OutputOk: string.IsNullOrWhiteSpace(outDev) ? true : outputOk,
+            SpeakersEnabled: speakersEnabled,
+            ShakerEnabled: shakerEnabled,
+            MasterGainDb: _config.MasterGainDb,
+            ShakerStrengthDb: _config.LfeGainDb,
+            GamePeak: gamePeak,
+            SecondaryPeak: secPeak,
+            OutputLfePeak: outLfe,
+                OutputPeakMax: outMax,
+            HealthText: _statusHealth.Text);
+    }
+
+    private void ApplyCopilotActionsWithConfirmation(CopilotAction[] actions)
+    {
+        if (actions.Length == 0)
+            return;
+
+        var preview = new StringBuilder();
+        preview.AppendLine("Apply these changes?");
+        preview.AppendLine();
+        foreach (var a in actions)
+            preview.AppendLine($"- {DescribeCopilotAction(a)}");
+
+        var result = MessageBox.Show(this, preview.ToString(), "Setup Assistant", MessageBoxButtons.OKCancel, MessageBoxIcon.Question);
+        if (result != DialogResult.OK)
+            return;
+
+        foreach (var a in actions)
+            ExecuteCopilotAction(a);
+
+        UpdateStatusBar();
+    }
+
+    private static string DescribeCopilotAction(CopilotAction a)
+    {
+        return a.Type switch
+        {
+            "set_output_device" => $"Set output device to '{a.StringValue}'",
+            "set_game_source" => $"Set Game Source to '{a.StringValue}'",
+            "apply_simple_preset" => $"Apply preset '{a.StringValue}'",
+            "show_advanced_controls" => a.BoolValue == true ? "Show Advanced Controls" : "Hide Advanced Controls",
+            "refresh_devices" => "Refresh device lists",
+            "set_shaker_mode" => a.StringValue == "gamesOnly" ? "Shaker only for Game Source" : "Shaker for all sources",
+            _ => a.Type
+        };
+    }
+
+    private void ExecuteCopilotAction(CopilotAction a)
+    {
+        switch (a.Type)
+        {
+            case "refresh_devices":
+                RefreshDeviceLists();
+                break;
+
+            case "set_output_device":
+                if (!string.IsNullOrWhiteSpace(a.StringValue))
+                {
+                    _simpleOutputCombo.SelectedItem = a.StringValue;
+                    _outputDeviceCombo.SelectedItem = a.StringValue;
+                }
+                break;
+
+            case "set_game_source":
+                if (!string.IsNullOrWhiteSpace(a.StringValue))
+                {
+                    _simpleGameSourceCombo.SelectedItem = a.StringValue;
+                    _musicDeviceCombo.SelectedItem = a.StringValue;
+                }
+                break;
+
+            case "set_secondary_source":
+                if (!string.IsNullOrWhiteSpace(a.StringValue))
+                {
+                    _simpleSecondarySourceCombo.SelectedItem = a.StringValue;
+                    _shakerDeviceCombo.SelectedItem = a.StringValue;
+                }
+                break;
+
+            case "apply_simple_preset":
+                var resolved = ResolveSimplePresetName(a.StringValue);
+                if (!string.IsNullOrWhiteSpace(resolved))
+                {
+                    _simplePresetCombo.SelectedItem = resolved;
+                    ApplySimplePreset(resolved);
+                }
+                break;
+
+            case "show_advanced_controls":
+                if (a.BoolValue is bool b)
+                {
+                    _uiState = _uiState with { ShowAdvancedControls = b };
+                    UiStateStore.Save(_uiState);
+                    _simpleAdvancedToggle.Checked = b;
+                    RebuildTabs(showAdvanced: b);
+                }
+                break;
+
+            case "set_shaker_mode":
+                ApplyShakerMode(a.StringValue);
+                break;
+
+            case "start_routing":
+                StartRouter();
+                break;
+
+            case "stop_routing":
+                StopRouter();
+                break;
+
+            case "set_channel_mute":
+                if (a.IntValue is int ch && a.BoolValue is bool mute)
+                {
+                    ch = Math.Clamp(ch, 0, 7);
+                    _channelMute[ch].Checked = mute;
+
+                    // Best-effort: keep console toggles aligned (if present).
+                    if (ch < _consoleOutMute.Length)
+                        _consoleOutMute[ch].Checked = mute;
+                }
+                break;
+
+            case "set_shaker_strength_db":
+                if (a.FloatValue is float shakerDb)
+                {
+                    shakerDb = Math.Clamp(shakerDb, -24f, 12f);
+                    _config.LfeGainDb = shakerDb;
+                    _simpleShakerStrength.Value = (int)Math.Round(shakerDb * 10.0f);
+                    _simpleShakerStrengthLabel.Text = $"{shakerDb:0.0} dB";
+                }
+                break;
+
+            case "set_master_gain_db":
+                if (a.FloatValue is float masterDb)
+                {
+                    masterDb = Math.Clamp(masterDb, -60f, 20f);
+                    _config.MasterGainDb = masterDb;
+                    _simpleMasterGain.Value = (int)Math.Round(masterDb * 10.0f);
+                    _simpleMasterGainLabel.Text = $"{masterDb:0.0} dB";
+                    _masterGainDb.Value = (decimal)masterDb;
+                }
+                break;
+        }
+
+        SaveConfigFromControls(showSavedDialog: false);
+    }
+
+    private string? ResolveSimplePresetName(string? requested)
+    {
+        if (string.IsNullOrWhiteSpace(requested))
+            return null;
+
+        // Allow assistant strings without emojis.
+        var r = requested.Trim();
+
+        foreach (var item in _simplePresetCombo.Items.Cast<object>())
+        {
+            var s = item as string;
+            if (string.IsNullOrWhiteSpace(s)) continue;
+
+            if (s.Contains(r, StringComparison.OrdinalIgnoreCase))
+                return s;
+        }
+
+        return requested;
+    }
+
+    private void ApplyShakerMode(string? shakerMode)
+    {
+        // The config's GroupRouting is captured from the neon routing matrix UI.
+        // Update the matrix so the change is visible and persists when saving.
+        // Rows: Front, Center, LFE, Rear, Side, Reserved. Cols: A (Game Source), B (Secondary).
+        var lfeRow = 2;
+        var enableSecondaryLfe = !string.Equals(shakerMode, "gamesOnly", StringComparison.OrdinalIgnoreCase);
+
+        _suppressConsoleSync = true;
+        try
+        {
+            _consoleMatrix.Set(lfeRow, 0, true);
+            _consoleMatrix.Set(lfeRow, 1, enableSecondaryLfe);
+            _config.GroupRouting = ReadMatrixToConfig();
+            _consoleMatrixDirty = true;
+        }
+        finally
+        {
+            _suppressConsoleSync = false;
+        }
     }
 
     private void RebuildTabs(bool showAdvanced)
@@ -2551,6 +2845,8 @@ public sealed class RouterMainForm : Form
         SetItems(_simpleSecondarySourceCombo, allowNone: true);
         SetItems(_simpleOutputCombo, allowNone: false);
 
+        _assistant.UpdateOutputDevices(devices.ToArray());
+
         // capture list
         {
             var selected = _latencyInputCombo.SelectedItem as string;
@@ -2949,6 +3245,8 @@ public sealed class RouterMainForm : Form
         _statusFormat.Text = $"Output: {(string.IsNullOrWhiteSpace(outDev) ? "(not selected)" : outDev)} | {sr} Hz | {mode}";
         _statusLatency.Text = $"Latency: {(int)_latencyMs.Value} ms | Mix: {_mixingModeCombo.SelectedItem}";
         _statusPreset.Text = string.IsNullOrWhiteSpace(preset) ? "Preset" : $"Preset: {preset}";
+
+        _assistant.UpdateSnapshot(BuildCopilotContext());
     }
 
     private void SaveConfigToDisk(bool showSavedDialog)
