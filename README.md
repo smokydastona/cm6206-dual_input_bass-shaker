@@ -82,7 +82,7 @@ This repo supports optional signing in GitHub Actions if you add these repositor
 
 Self-signed quickstart (dev/testing):
 - Create + export a self-signed code-signing cert:
-	- `pwsh scripts/new-self-signed-codesign-cert.ps1 -SubjectName SmokyDaStona -PfxPassword 'your_password' -TrustForCurrentUser`
+	- `pwsh scripts/new-self-signed-codesign-cert.ps1 -SubjectName SmokyDaStona -PfxCredential (New-Object PSCredential('pfx', (ConvertTo-SecureString 'your_password' -AsPlainText -Force))) -TrustForCurrentUser`
 - Convert the `.pfx` to base64 for GitHub Secrets:
 	- `pwsh scripts/pfx-to-base64.ps1 -PfxPath .\codesign_dev\codesign_SmokyDaStona_dev.pfx`
 	- Paste the output into `CODESIGN_PFX_BASE64`
@@ -97,7 +97,7 @@ Create a release:
 - `git push origin v1.2.3`
 
 To sign locally (requires Windows SDK SignTool):
-- `pwsh scripts/sign.ps1 -File .\Cm6206DualRouter.exe -PfxPath .\yourcert.pfx -PfxPassword '...'
+- `pwsh scripts/sign.ps1 -File .\Cm6206DualRouter.exe -PfxPath .\yourcert.pfx -PfxCredential (New-Object PSCredential('pfx', (ConvertTo-SecureString '...' -AsPlainText -Force)))`
 
 ## Local build (optional)
 - Install **.NET 8 SDK (x64)**: https://dotnet.microsoft.com/download/dotnet/8.0

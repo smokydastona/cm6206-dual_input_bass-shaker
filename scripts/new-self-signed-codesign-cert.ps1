@@ -1,7 +1,7 @@
 param(
   [string]$SubjectName = "SmokyDaStona",
   [string]$OutputDir = ".\\codesign_dev",
-  [Parameter(Mandatory=$true)][string]$PfxPassword,
+  [Parameter(Mandatory=$true)][PSCredential]$PfxCredential,
   [int]$ValidYears = 3,
   [switch]$TrustForCurrentUser
 )
@@ -43,8 +43,7 @@ if (-not $cert) {
 Export-Certificate -Cert $cert -FilePath $cerPath | Out-Null
 
 # Export PFX
-$secure = ConvertTo-SecureString -String $PfxPassword -Force -AsPlainText
-Export-PfxCertificate -Cert $cert -FilePath $pfxPath -Password $secure | Out-Null
+Export-PfxCertificate -Cert $cert -FilePath $pfxPath -Password $PfxCredential.Password | Out-Null
 
 Write-Host "Wrote: $cerPath"
 Write-Host "Wrote: $pfxPath"

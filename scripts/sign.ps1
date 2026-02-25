@@ -1,7 +1,7 @@
 param(
   [Parameter(Mandatory=$true)][string]$File,
   [Parameter(Mandatory=$true)][string]$PfxPath,
-  [Parameter(Mandatory=$true)][string]$PfxPassword,
+  [Parameter(Mandatory=$true)][PSCredential]$PfxCredential,
   [string]$TimestampUrl = "http://timestamp.digicert.com"
 )
 
@@ -38,7 +38,8 @@ function Find-SignTool {
 $signtool = Find-SignTool
 Write-Host "Using signtool: $signtool"
 
-& $signtool sign /fd sha256 /a /f $PfxPath /p $PfxPassword /tr $TimestampUrl /td sha256 $File
+$password = $PfxCredential.GetNetworkCredential().Password
+& $signtool sign /fd sha256 /a /f $PfxPath /p $password /tr $TimestampUrl /td sha256 $File
 & $signtool verify /pa /v $File
 
 Write-Host "Signed: $File"
