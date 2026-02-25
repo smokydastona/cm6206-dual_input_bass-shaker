@@ -544,6 +544,10 @@ public sealed class RouterMainForm : Form
                     sb.AppendLine($"  R{kvp.Key:D2} = 0x{kvp.Value:X4} ({kvp.Value})");
                 }
 
+                sb.AppendLine();
+                sb.AppendLine("Decoded:");
+                sb.AppendLine(Cm6206RegisterDecoder.Decode(regs));
+
                 _cm6206HidLastDump = sb.ToString().TrimEnd();
                 _cm6206HidStatusLabel.Text = "OK";
                 UpdateDiagnostics();
