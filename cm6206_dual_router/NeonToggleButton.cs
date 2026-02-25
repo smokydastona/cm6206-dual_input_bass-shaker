@@ -10,7 +10,7 @@ internal sealed class NeonToggleButton : Control
     private bool _pressed;
     private float _hoverT;
 
-    private readonly Timer _anim = new();
+    private readonly System.Windows.Forms.Timer _anim = new();
 
     public NeonToggleButton()
     {

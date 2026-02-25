@@ -12,7 +12,7 @@ internal sealed class NeonMeter : Control
     private float _clipT;
     private float _clipPhase;
 
-    private readonly Timer _timer = new();
+    private readonly System.Windows.Forms.Timer _timer = new();
 
     public NeonMeter()
     {

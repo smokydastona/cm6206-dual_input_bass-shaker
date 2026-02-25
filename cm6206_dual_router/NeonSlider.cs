@@ -14,7 +14,7 @@ internal sealed class NeonSlider : Control
     private bool _drag;
     private float _hoverT;
 
-    private readonly Timer _anim = new();
+    private readonly System.Windows.Forms.Timer _anim = new();
 
     public NeonSlider()
     {

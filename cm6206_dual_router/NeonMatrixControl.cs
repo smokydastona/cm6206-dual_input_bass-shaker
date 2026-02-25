@@ -13,7 +13,7 @@ internal sealed class NeonMatrixControl : Control
     private float _hoverT;
     private float _selectT;
 
-    private readonly Timer _anim = new();
+    private readonly System.Windows.Forms.Timer _anim = new();
 
     public NeonMatrixControl(int rows = 6, int cols = 2)
     {
