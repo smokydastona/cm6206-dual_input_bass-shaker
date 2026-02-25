@@ -7,13 +7,7 @@ namespace Cm6206DualRouter;
 internal sealed class NeonMeter : Control
 {
     private float _target;
-    private float _display;
     private bool _clip;
-    private float _clipT;
-    private float _clipPhase;
-
-    private readonly System.Windows.Forms.Timer _timer = new();
-    private bool _timerStarted;
 
     public NeonMeter()
     {
@@ -23,68 +17,6 @@ internal sealed class NeonMeter : Control
         BackColor = Color.Transparent;
         Width = 18;
         Height = 120;
-
-        _timer.Interval = 16;
-        _timer.Tick += (_, _) =>
-        {
-            // inertia
-            var rise = 0.35f;
-            var fall = 0.92f;
-            if (_display < _target)
-                _display = _display + (_target - _display) * rise;
-            else
-                _display *= fall;
-
-            if (_clip)
-            {
-                _clipT = Math.Min(1f, _clipT + 0.22f);
-                _clipPhase += 0.55f;
-            }
-            else
-            {
-                _clipT = Math.Max(0f, _clipT - 0.12f);
-                _clipPhase *= 0.92f;
-            }
-
-            Invalidate();
-        };
-    }
-
-    protected override void OnHandleCreated(EventArgs e)
-    {
-        base.OnHandleCreated(e);
-        StartTimerIfNeeded();
-    }
-
-    protected override void OnHandleDestroyed(EventArgs e)
-    {
-        StopTimerIfNeeded();
-        base.OnHandleDestroyed(e);
-    }
-
-    protected override void Dispose(bool disposing)
-    {
-        if (disposing)
-        {
-            StopTimerIfNeeded();
-            _timer.Dispose();
-        }
-
-        base.Dispose(disposing);
-    }
-
-    private void StartTimerIfNeeded()
-    {
-        if (_timerStarted) return;
-        _timerStarted = true;
-        _timer.Start();
-    }
-
-    private void StopTimerIfNeeded()
-    {
-        if (!_timerStarted) return;
-        _timer.Stop();
-        _timerStarted = false;
     }
 
     public bool Vertical { get; set; } = true;
@@ -98,6 +30,7 @@ internal sealed class NeonMeter : Control
             var v = Math.Clamp(value, 0f, 1f);
             _target = v;
             _clip = v >= 0.999f;
+            Invalidate();
         }
     }
 
@@ -119,12 +52,12 @@ internal sealed class NeonMeter : Control
         var fillRect = rect;
         if (Vertical)
         {
-            var h = (int)Math.Round(rect.Height * _display);
+            var h = (int)Math.Round(rect.Height * _target);
             fillRect = new Rectangle(rect.Left, rect.Bottom - h, rect.Width, h);
         }
         else
         {
-            var w = (int)Math.Round(rect.Width * _display);
+            var w = (int)Math.Round(rect.Width * _target);
             fillRect = new Rectangle(rect.Left, rect.Top, w, rect.Height);
         }
 
@@ -134,13 +67,10 @@ internal sealed class NeonMeter : Control
             e.Graphics.FillRectangle(grad, fillRect);
         }
 
-        // Clip pulse (red)
-        if (_clipT > 0f)
+        // Clip (red border)
+        if (_clip)
         {
-            // Pulse while clipping (red border)
-            var pulse = (float)((Math.Sin(_clipPhase) + 1.0) * 0.5); // 0..1
-            var a = (int)((70 + 160 * pulse) * _clipT);
-            using var pen = new Pen(Color.FromArgb(a, NeonTheme.MeterClip), 3f);
+            using var pen = new Pen(Color.FromArgb(210, NeonTheme.MeterClip), 3f);
             e.Graphics.DrawRectangle(pen, rect);
         }
     }

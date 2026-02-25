@@ -10,9 +10,6 @@ internal sealed class NeonToggleButton : Control
     private bool _pressed;
     private float _hoverT;
 
-    private readonly System.Windows.Forms.Timer _anim = new();
-    private bool _animStarted;
-
     public NeonToggleButton()
     {
         DoubleBuffered = true;
@@ -21,53 +18,6 @@ internal sealed class NeonToggleButton : Control
         Width = 34;
         Height = 22;
         Cursor = Cursors.Hand;
-
-        _anim.Interval = 16;
-        _anim.Tick += (_, _) =>
-        {
-            var target = _hover ? 1f : 0f;
-            var step = 0.12f; // ~120ms
-            if (_hoverT < target) _hoverT = Math.Min(target, _hoverT + step);
-            if (_hoverT > target) _hoverT = Math.Max(target, _hoverT - step);
-            Invalidate();
-        };
-    }
-
-    protected override void OnHandleCreated(EventArgs e)
-    {
-        base.OnHandleCreated(e);
-        StartAnimIfNeeded();
-    }
-
-    protected override void OnHandleDestroyed(EventArgs e)
-    {
-        StopAnimIfNeeded();
-        base.OnHandleDestroyed(e);
-    }
-
-    protected override void Dispose(bool disposing)
-    {
-        if (disposing)
-        {
-            StopAnimIfNeeded();
-            _anim.Dispose();
-        }
-
-        base.Dispose(disposing);
-    }
-
-    private void StartAnimIfNeeded()
-    {
-        if (_animStarted) return;
-        _animStarted = true;
-        _anim.Start();
-    }
-
-    private void StopAnimIfNeeded()
-    {
-        if (!_animStarted) return;
-        _anim.Stop();
-        _animStarted = false;
     }
 
     public bool Checked
@@ -89,6 +39,8 @@ internal sealed class NeonToggleButton : Control
     {
         base.OnMouseEnter(e);
         _hover = true;
+        _hoverT = 1f;
+        Invalidate();
     }
 
     protected override void OnMouseLeave(EventArgs e)
@@ -96,6 +48,8 @@ internal sealed class NeonToggleButton : Control
         base.OnMouseLeave(e);
         _hover = false;
         _pressed = false;
+        _hoverT = 0f;
+        Invalidate();
     }
 
     protected override void OnMouseDown(MouseEventArgs e)

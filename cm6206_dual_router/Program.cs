@@ -64,7 +64,7 @@ internal static class Program
 
         var uiOption = new Option<bool>(
             name: "--ui",
-            description: "Launch the tabbed UI (device selection + per-channel gains)");
+            description: "Launch the UI");
 
         var root = new RootCommand("CM6206 Dual Virtual Router (2 virtual outputs -> 1 CM6206 7.1)");
         root.AddOption(configOption);
@@ -86,7 +86,7 @@ internal static class Program
             {
                 AppLog.Info("Launching WinForms UI...");
                 ApplicationConfiguration.Initialize();
-                AppLog.Info("Creating RouterMainForm...");
+                AppLog.Info("Creating AaaMainForm...");
 
                 // If the app hangs before RouterMainForm ctor logs, we need to know whether
                 // WinForms itself can construct a basic Form on this machine.
@@ -97,8 +97,8 @@ internal static class Program
                 }
                 AppLog.Info("Smoke-test Form created OK.");
 
-                var form = new RouterMainForm(configPath);
-                AppLog.Info("RouterMainForm created; entering Application.Run...");
+                var form = new AaaMainForm(configPath);
+                AppLog.Info("AaaMainForm created; entering Application.Run...");
                 Application.Run(form);
                 AppLog.Info("Application.Run returned; exiting UI mode.");
                 return;
