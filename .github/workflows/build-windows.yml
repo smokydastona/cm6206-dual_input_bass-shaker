@@ -140,6 +140,12 @@ jobs:
           & $signtool sign /fd sha256 /a /f $pfxPath /p $env:CODESIGN_PFX_PASSWORD /tr $timestamp /td sha256 $exe
           & $signtool verify /pa /v $exe
 
+      - name: Generate UI assets (PNG/SVG/9-slice)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          dotnet run -c Release --project tools/Cm6206AssetGenerator -- --out "artifacts/cm6206_dual_router_win-x64/assets/generated" --theme all
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
