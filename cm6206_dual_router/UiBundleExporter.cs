@@ -19,11 +19,13 @@ internal static class UiBundleExporter
 
         var stylePath = Path.Combine(outputRootDir, "assets", "bassshakertelemetry", "neon", "neon_style.json");
         var animPath = Path.Combine(outputRootDir, "assets", "bassshakertelemetry", "neon", "neon_animation.json");
+        var schemaPath = Path.Combine(outputRootDir, "assets", "bassshakertelemetry", "neon", "neon_schema.json");
         var arrowLeftPath = Path.Combine(outputRootDir, "assets", "bassshakertelemetry", "textures", "gui", "neon", "arrow_left.png");
         var arrowRightPath = Path.Combine(outputRootDir, "assets", "bassshakertelemetry", "textures", "gui", "neon", "arrow_right.png");
 
         Directory.CreateDirectory(Path.GetDirectoryName(stylePath)!);
         Directory.CreateDirectory(Path.GetDirectoryName(animPath)!);
+        Directory.CreateDirectory(Path.GetDirectoryName(schemaPath)!);
         Directory.CreateDirectory(Path.GetDirectoryName(arrowLeftPath)!);
         Directory.CreateDirectory(Path.GetDirectoryName(arrowRightPath)!);
 
@@ -89,8 +91,46 @@ internal static class UiBundleExporter
 }
 """;
 
+        // Minimal shared UI schema (MVP): Telemetry config screen layout/rows.
+        // The Minecraft mod consumes this as neon/neon_schema.json from the active UI bundle.
+        var schemaJson = """
+{
+  "version": 1,
+  "screens": {
+    "telemetry_config": {
+      "titleKey": "bassshakertelemetry.config.title",
+      "rows": [
+        { "type": "device_button", "id": "outputDevice", "textKey": "bassshakertelemetry.config.output_device", "action": "openOutputDevice" },
+        { "type": "slider", "id": "masterVolume", "textKey": "bassshakertelemetry.config.master_volume", "bind": "masterVolume" },
+        { "type": "button", "id": "advanced", "textKey": "bassshakertelemetry.config.advanced", "action": "openAdvanced" },
+        { "type": "button", "id": "soundscape", "textKey": "bassshakertelemetry.soundscape.open", "action": "openSoundscape" },
+        {
+          "type": "hstack",
+          "gap": 10,
+          "children": [
+            { "type": "toggle", "id": "damage", "textKey": "bassshakertelemetry.config.damage_enabled", "bind": "damageBurstEnabled" },
+            { "type": "toggle", "id": "biome", "textKey": "bassshakertelemetry.config.biome_enabled", "bind": "biomeChimeEnabled" }
+          ]
+        },
+        {
+          "type": "hstack",
+          "gap": 10,
+          "children": [
+            { "type": "toggle", "id": "road", "textKey": "bassshakertelemetry.config.road_enabled", "bind": "roadTextureEnabled" },
+            { "type": "toggle", "id": "sound", "textKey": "bassshakertelemetry.config.sound_enabled", "bind": "soundHapticsEnabled" }
+          ]
+        },
+        { "type": "toggle", "id": "gameplay", "textKey": "bassshakertelemetry.config.gameplay_enabled", "bind": "gameplayHapticsEnabled" },
+        { "type": "toggle", "id": "accessibilityHud", "textKey": "bassshakertelemetry.config.accessibility_hud", "bind": "accessibilityHudEnabled" }
+      ]
+    }
+  }
+}
+""";
+
         File.WriteAllText(stylePath, styleJson, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
         File.WriteAllText(animPath, animJson, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+        File.WriteAllText(schemaPath, schemaJson, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
 
         // Arrow icons: crisp, transparent background, filled cyan arrow.
         WriteArrowPng(arrowLeftPath, isLeft: true, sizePx: arrowSizePx, color: primary);
