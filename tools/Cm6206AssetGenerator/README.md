@@ -27,6 +27,10 @@ Or directly:
 
 - `dotnet run -c Release --project tools/Cm6206AssetGenerator -- --out assets/generated --theme all`
 
+## Used by CI / releases
+GitHub Actions runs this tool during builds and writes into the published app folder so the bundle contains the generated assets:
+- `artifacts/cm6206_dual_router_win-x64/assets/generated/`
+
 ## Notes
 
 - PNGs are the canonical pixel-perfect exports.

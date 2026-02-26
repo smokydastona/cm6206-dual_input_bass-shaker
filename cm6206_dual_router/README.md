@@ -72,6 +72,13 @@ cd "cm6206_dual_router"
 dotnet run -c Release -- --config router.json
 ```
 
+Smoke-test template:
+```powershell
+cd "cm6206_dual_router"
+dotnet run -c Release -- --ui --config router.smoke.json
+```
+`router.smoke.json` is a template: replace the device names with ones from `--list-devices`.
+
 ### UI mode (tabs + per-channel adjustment)
 ```powershell
 cd "cm6206_dual_router"
@@ -118,6 +125,9 @@ In Windows Sound settings for the output device:
 - `musicGainDb`, `shakerGainDb`: independent level controls.
 - `shakerHighPassHz`, `shakerLowPassHz`: bass shaker band-pass.
 - `musicHighPassHz`, `musicLowPassHz`: optional music filtering (omit or set `null` for none).
+- `shakerNudgesEnabled`: enables gentle time nudges to keep the shaker input buffer near a target fill level.
+- `shakerNudgeTargetBufferMs`: target buffered audio (ms) for shaker ingest (used only when nudges are enabled).
+- `shakerNudgeDeadbandMs`: +/- deadband around target (ms) where no correction happens.
 - `rearGainDb`, `sideGainDb`, `lfeGainDb`: per-group trims for shaker distribution.
 - `useCenterChannel`: optional mono feed to center.
 - `sampleRate`: preferred output sample rate.

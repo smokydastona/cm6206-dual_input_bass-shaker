@@ -37,6 +37,9 @@ Note: creating *new* playback devices requires a signed driver. Current releases
 
 For full usage details, see `cm6206_dual_router/README.md`.
 
+Smoke-test config template:
+- `cm6206_dual_router/router.smoke.json` is a **template** you can copy and fill in with device names from `--list-devices`.
+
 ## Minecraft haptics
 This repo is **routing/mixing only**.
 
@@ -79,12 +82,12 @@ Prereqs:
 - Inno Setup 6
 
 Command:
-- `pwsh scripts/build_installer.ps1 -Version 1.2.3`
+- `pwsh scripts/build_installer.ps1 -Version 0.2.2`
 
 Outputs:
 - Published app: `artifacts/cm6206_dual_router_win-x64/`
-- Installer: `artifacts/installer/Cm6206DualRouterSetup_1.2.3.exe`
-- (Optional) Bundle ZIP: `artifacts/cm6206_dual_router_bundle_1.2.3.zip`
+- Installer: `artifacts/installer/Cm6206DualRouterSetup_0.2.2.exe`
+- (Optional) Bundle ZIP: `artifacts/cm6206_dual_router_bundle_0.2.2.zip`
 
 ### Code signing / “Publisher”
 Windows shows a real **Publisher** in UAC/SmartScreen only when the EXE is **code-signed**.
@@ -108,11 +111,11 @@ Self-signed quickstart (dev/testing):
 ### Releases ("tag and push")
 This repo uses **two** GitHub Actions workflows:
 - **Push builds**: build/upload artifacts for `main` and PRs.
-- **Tag releases**: when you push a tag like `v1.2.3`, it builds and creates a GitHub **Release** with a versioned ZIP asset and a Setup EXE. The app's in-app update checker uses GitHub "latest release".
+- **Tag releases**: when you push a tag like `v0.2.2`, it builds and creates a GitHub **Release** with a versioned ZIP asset and a Setup EXE. The app's in-app update checker uses GitHub "latest release".
 
 Create a release:
-- `git tag v1.2.3`
-- `git push origin v1.2.3`
+- `git tag v0.2.2`
+- `git push origin v0.2.2`
 
 To sign locally (requires Windows SDK SignTool):
 - `pwsh scripts/sign.ps1 -File .\Cm6206DualRouter.exe -PfxPath .\yourcert.pfx -PfxCredential (New-Object PSCredential('pfx', (ConvertTo-SecureString '...' -AsPlainText -Force)))`
