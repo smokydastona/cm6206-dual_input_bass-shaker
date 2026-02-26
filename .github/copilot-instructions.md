@@ -2,6 +2,10 @@
 
 This repo is a **.NET 8 Windows audio app** that uses **NAudio + WASAPI**.
 
+## Stack context (multi-repo workspace)
+- This repo is one part of a 3-repo “SimHub-style” stack (driver + router + Minecraft mod).
+- Workspace-level overview + cross-repo contracts live in `../.github/copilot-instructions.md`.
+
 ## Repo layout (source of truth)
 - `cm6206_dual_router/`: WinForms router that outputs **one 7.1 render endpoint**.
   - Current ingestion: captures **two render endpoints** via WASAPI loopback.
