@@ -142,7 +142,7 @@ public sealed class WasapiDualRouter : IDisposable
             }
         };
 
-        var waveProvider = new SampleToWaveProvider(meteredOutput);
+        var waveProvider = new FloatSampleToWaveProvider(meteredOutput);
 
         var shareMode = _config.UseExclusiveMode ? AudioClientShareMode.Exclusive : AudioClientShareMode.Shared;
         _output = new WasapiOut(_outputDevice, shareMode, true, _config.LatencyMs);
