@@ -9,14 +9,68 @@ internal sealed class CmvadrIoctlInput : IDisposable
 {
     private readonly string _devicePath;
     private readonly BufferedWaveProvider _buffer;
-    private readonly SafeFileHandle _handle;
+    private SafeFileHandle _handle;
+
+    private readonly VirtualAudioDriverIoctl.CmvadrAudioFormat _format;
 
     private CancellationTokenSource? _cts;
     private Task? _task;
 
+    private readonly object _statusLock = new();
+    private DateTime _startUtc;
+    private DateTime? _lastSuccessfulReadUtc;
+    private DateTime? _lastIoctlErrorUtc;
+    private long _totalReadCalls;
+    private long _totalBytesRead;
+    private long _totalFramesRead;
+    private long _totalEmptyReads;
+    private long _totalIoctlFailures;
+    private int _consecutiveIoctlFailures;
+    private bool _stoppedPermanently;
+
     public WaveFormat WaveFormat { get; }
 
     public BufferedWaveProvider Buffer => _buffer;
+
+    public VirtualAudioDriverIoctl.CmvadrAudioFormat Format => _format;
+
+    public readonly record struct StatusSnapshot(
+        string DevicePath,
+        VirtualAudioDriverIoctl.CmvadrAudioFormat Format,
+        bool IsRunning,
+        DateTime StartUtc,
+        DateTime? LastSuccessfulReadUtc,
+        DateTime? LastIoctlErrorUtc,
+        long TotalReadCalls,
+        long TotalBytesRead,
+        long TotalFramesRead,
+        long TotalEmptyReads,
+        long TotalIoctlFailures,
+        int ConsecutiveIoctlFailures,
+        int BufferedBytes,
+        int BufferLengthBytes);
+
+    public StatusSnapshot GetStatusSnapshot()
+    {
+        lock (_statusLock)
+        {
+            return new StatusSnapshot(
+                DevicePath: _devicePath,
+                Format: _format,
+                IsRunning: _cts is not null,
+                StartUtc: _startUtc,
+                LastSuccessfulReadUtc: _lastSuccessfulReadUtc,
+                LastIoctlErrorUtc: _lastIoctlErrorUtc,
+                TotalReadCalls: _totalReadCalls,
+                TotalBytesRead: _totalBytesRead,
+                TotalFramesRead: _totalFramesRead,
+                TotalEmptyReads: _totalEmptyReads,
+                TotalIoctlFailures: _totalIoctlFailures,
+                ConsecutiveIoctlFailures: _consecutiveIoctlFailures,
+                BufferedBytes: _buffer.BufferedBytes,
+                BufferLengthBytes: _buffer.BufferLength);
+        }
+    }
 
     private readonly int _bytesPerFrame;
 
@@ -24,6 +78,7 @@ internal sealed class CmvadrIoctlInput : IDisposable
     {
         _devicePath = devicePath;
         _handle = handle;
+        _format = fmt;
 
         WaveFormat = CreateWaveFormat(fmt);
         _bytesPerFrame = checked((int)(fmt.Channels * (fmt.BitsPerSample / 8)));
@@ -33,6 +88,8 @@ internal sealed class CmvadrIoctlInput : IDisposable
             DiscardOnBufferOverflow = true,
             BufferDuration = TimeSpan.FromSeconds(2)
         };
+
+        _startUtc = DateTime.UtcNow;
     }
 
     public static CmvadrIoctlInput Open(string devicePath)
@@ -81,10 +138,25 @@ internal sealed class CmvadrIoctlInput : IDisposable
 
     public void Start()
     {
+        if (_stoppedPermanently)
+            throw new ObjectDisposedException(nameof(CmvadrIoctlInput), "This CMVADR input was stopped permanently (handle closed).");
+
         if (_cts is not null)
             return;
 
         _cts = new CancellationTokenSource();
+        lock (_statusLock)
+        {
+            _startUtc = DateTime.UtcNow;
+            _lastSuccessfulReadUtc = null;
+            _lastIoctlErrorUtc = null;
+            _totalReadCalls = 0;
+            _totalBytesRead = 0;
+            _totalFramesRead = 0;
+            _totalEmptyReads = 0;
+            _totalIoctlFailures = 0;
+            _consecutiveIoctlFailures = 0;
+        }
         _task = Task.Run(() => ReadLoop(_cts.Token));
     }
 
@@ -93,6 +165,18 @@ internal sealed class CmvadrIoctlInput : IDisposable
         _cts?.Cancel();
 
         try { _task?.Wait(500); } catch { /* ignore */ }
+
+        // DeviceIoControl can block indefinitely depending on the driver implementation.
+        // Best-effort: close the handle so the read loop unblocks and exits.
+        if (_task is { IsCompleted: false })
+        {
+            try
+            {
+                _stoppedPermanently = true;
+                _handle.Dispose();
+            }
+            catch { /* ignore */ }
+        }
 
         _task = null;
         _cts?.Dispose();
@@ -123,16 +207,27 @@ internal sealed class CmvadrIoctlInput : IDisposable
             int bytesReturned;
             try
             {
+                lock (_statusLock) { _totalReadCalls++; }
                 bytesReturned = NativeMethods.DeviceIoControlRead(_handle, VirtualAudioDriverIoctl.IoctlRead, request, outBuffer);
             }
             catch
             {
+                lock (_statusLock)
+                {
+                    _lastIoctlErrorUtc = DateTime.UtcNow;
+                    _totalIoctlFailures++;
+                    _consecutiveIoctlFailures++;
+                }
+
                 // If the driver goes away, exit the loop and let the router stop.
                 return;
             }
 
             if (bytesReturned <= 0)
+            {
+                lock (_statusLock) { _totalEmptyReads++; }
                 continue;
+            }
 
             var offset = 0;
             var payloadBytes = bytesReturned;
@@ -148,6 +243,26 @@ internal sealed class CmvadrIoctlInput : IDisposable
                 {
                     offset = headerSize;
                     payloadBytes = (int)expectedPayload;
+
+                    lock (_statusLock)
+                    {
+                        _lastSuccessfulReadUtc = DateTime.UtcNow;
+                        _consecutiveIoctlFailures = 0;
+                        _totalFramesRead += framesReturned;
+                        _totalBytesRead += payloadBytes;
+                    }
+                }
+            }
+
+            if (offset == 0)
+            {
+                var framesInferred = payloadBytes / _bytesPerFrame;
+                lock (_statusLock)
+                {
+                    _lastSuccessfulReadUtc = DateTime.UtcNow;
+                    _consecutiveIoctlFailures = 0;
+                    _totalFramesRead += framesInferred;
+                    _totalBytesRead += payloadBytes;
                 }
             }
 

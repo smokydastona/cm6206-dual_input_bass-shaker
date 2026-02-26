@@ -102,6 +102,29 @@ jobs:
             /p:InformationalVersion=$env:INFORMATIONAL_VERSION `
             -o "artifacts/cm6206_dual_router_win-x64"
 
+      - name: Export Neon UI bundle (Minecraft)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          $exe = Join-Path $PWD 'artifacts/cm6206_dual_router_win-x64/Cm6206DualRouter.exe'
+          if (-not (Test-Path -LiteralPath $exe)) {
+            throw "Expected published EXE not found: $exe"
+          }
+
+          $outDir = Join-Path $PWD 'artifacts/neon_ui_bundle'
+          if (Test-Path -LiteralPath $outDir) {
+            Remove-Item -LiteralPath $outDir -Recurse -Force
+          }
+          New-Item -ItemType Directory -Force -Path $outDir | Out-Null
+
+          & $exe --export-ui-bundle $outDir
+
+          $zip = Join-Path $PWD 'artifacts/bst_neon_ui_bundle.zip'
+          if (Test-Path -LiteralPath $zip) { Remove-Item -LiteralPath $zip -Force }
+          Compress-Archive -Path (Join-Path $outDir '*') -DestinationPath $zip
+          Write-Host "Created UI bundle: $zip"
+
       - name: Sign published EXE (optional)
         shell: pwsh
         env:
@@ -252,9 +275,16 @@ jobs:
           name: cm6206_dual_router_bundle_${{ env.BUNDLE_VERSION }}
           path: artifacts/cm6206_dual_router_bundle_${{ env.BUNDLE_VERSION }}.zip
 
+      - name: Upload artifact (neon ui bundle)
+        uses: actions/upload-artifact@v4
+        with:
+          name: bst_neon_ui_bundle
+          path: artifacts/bst_neon_ui_bundle.zip
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
             artifacts/cm6206_dual_router_bundle_${{ env.BUNDLE_VERSION }}.zip
+            artifacts/bst_neon_ui_bundle.zip
           generate_release_notes: true

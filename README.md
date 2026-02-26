@@ -55,8 +55,9 @@ Common setup:
 If you want a normal Windows installer (Start menu shortcut, optional desktop icon) and an optional step to install the CM6206 driver, use the Inno Setup installer.
 
 ### Download (from GitHub Releases)
-- Tag releases include one bundle ZIP:
+- Tag releases include:
 	- `cm6206_dual_router_bundle_<version>.zip` (portable app + installer + cosign signatures + sample config)
+	- `bst_neon_ui_bundle.zip` (Minecraft mod UI bundle: `assets/bassshakertelemetry/...`)
 
 ### What the installer does
 - Installs the app into `Program Files`.

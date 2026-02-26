@@ -80,6 +80,20 @@ public sealed class RouterConfig
     [JsonPropertyName("shakerLowPassHz")]
     public float ShakerLowPassHz { get; set; } = 80.0f;
 
+    // Optional: apply small timing corrections ("nudges") to keep the Shaker input near a
+    // target buffer fill. This helps counter slow clock drift between independent capture sources.
+    // This is applied only to the Shaker stream (not Music/Game).
+    [JsonPropertyName("shakerNudgesEnabled")]
+    public bool ShakerNudgesEnabled { get; set; } = true;
+
+    // Target upstream buffer fill level used by the nudge logic.
+    [JsonPropertyName("shakerNudgeTargetBufferMs")]
+    public int ShakerNudgeTargetBufferMs { get; set; } = 250;
+
+    // +/- deadband around target before nudges begin.
+    [JsonPropertyName("shakerNudgeDeadbandMs")]
+    public int ShakerNudgeDeadbandMs { get; set; } = 50;
+
     // Mixing strategy for how inputs are combined.
     // - FrontBoth: Front L/R = Music + Shaker (default)
     // - Dedicated: Front L/R = Music only; Shaker stays on Rear/Side/LFE
@@ -189,8 +203,9 @@ public sealed class RouterConfig
 
         if (requireDevices)
         {
-            if (string.IsNullOrWhiteSpace(MusicInputRenderDevice))
-                throw new InvalidOperationException("musicInputRenderDevice is required");
+            // Loopback needs an explicit render endpoint name. CMVADR mode opens fixed Win32 device paths instead.
+            if (ingest == "WasapiLoopback" && string.IsNullOrWhiteSpace(MusicInputRenderDevice))
+                throw new InvalidOperationException("musicInputRenderDevice is required when inputIngestMode=WasapiLoopback");
             if (string.IsNullOrWhiteSpace(OutputRenderDevice))
                 throw new InvalidOperationException("outputRenderDevice is required");
         }
@@ -226,6 +241,11 @@ public sealed class RouterConfig
             throw new InvalidOperationException("calibrationPreset must be one of: Manual, IdentifySine, LevelPink, AlternateSinePink");
         if (ShakerHighPassHz <= 0 || ShakerLowPassHz <= 0 || ShakerHighPassHz >= ShakerLowPassHz)
             throw new InvalidOperationException("shakerHighPassHz must be >0 and < shakerLowPassHz");
+
+        if (ShakerNudgeTargetBufferMs < 0 || ShakerNudgeTargetBufferMs > 2000)
+            throw new InvalidOperationException("shakerNudgeTargetBufferMs is out of range (0..2000)");
+        if (ShakerNudgeDeadbandMs < 0 || ShakerNudgeDeadbandMs > 1000)
+            throw new InvalidOperationException("shakerNudgeDeadbandMs is out of range (0..1000)");
 
         if (MasterGainDb < -120 || MasterGainDb > 24)
             throw new InvalidOperationException("masterGainDb is out of range (-120..24)");

@@ -100,6 +100,7 @@ public sealed class RouterMainForm : Form
 
     private readonly ComboBox _musicDeviceCombo;
     private readonly ComboBox _shakerDeviceCombo;
+    private readonly ComboBox _ingestModeCombo;
     private readonly ComboBox _outputDeviceCombo;
 
     private readonly ComboBox _latencyInputCombo;
@@ -148,6 +149,8 @@ public sealed class RouterMainForm : Form
 
     private string? _cm6206HidLastDump;
     private readonly TextBox _diagnosticsText;
+
+    private readonly TextBox _inputBackendStatusText;
 
     private readonly DataGridView _routingGrid;
 
@@ -310,6 +313,7 @@ public sealed class RouterMainForm : Form
 
         _musicDeviceCombo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDown };
         _shakerDeviceCombo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDown };
+        _ingestModeCombo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 220 };
         _outputDeviceCombo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList };
 
         _latencyInputCombo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList };
@@ -360,6 +364,16 @@ public sealed class RouterMainForm : Form
             ScrollBars = ScrollBars.Vertical,
             Dock = DockStyle.Fill,
             WordWrap = false
+        };
+
+        _inputBackendStatusText = new TextBox
+        {
+            Multiline = true,
+            ReadOnly = true,
+            ScrollBars = ScrollBars.Vertical,
+            Dock = DockStyle.Top,
+            WordWrap = false,
+            Height = 84
         };
 
         _routingGrid = new DataGridView
@@ -1739,7 +1753,7 @@ public sealed class RouterMainForm : Form
         {
             Dock = DockStyle.Fill,
             ColumnCount = 2,
-            RowCount = 9,
+            RowCount = 10,
             Padding = new Padding(12),
             AutoSize = true
         };
@@ -1752,18 +1766,43 @@ public sealed class RouterMainForm : Form
         layout.Controls.Add(new Label { Text = "Virtual input B name", AutoSize = true }, 0, 1);
         layout.Controls.Add(_shakerDeviceCombo, 1, 1);
 
-        layout.Controls.Add(new Label { Text = "Output device", AutoSize = true }, 0, 2);
-        layout.Controls.Add(_outputDeviceCombo, 1, 2);
+        layout.Controls.Add(new Label { Text = "Input ingest mode", AutoSize = true }, 0, 2);
+        _ingestModeCombo.Items.Clear();
+        _ingestModeCombo.Items.Add("WasapiLoopback");
+        _ingestModeCombo.Items.Add("CmvadrIoctl");
+        _toolTip.SetToolTip(_ingestModeCombo, "Select how inputs are ingested: WASAPI loopback capture vs native CMVADR IOCTL pull. If routing is running, changing this will restart routing.");
+        layout.Controls.Add(_ingestModeCombo, 1, 2);
 
-        layout.Controls.Add(new Label { Text = "Latency input (mic/line-in)", AutoSize = true }, 0, 3);
+        _ingestModeCombo.SelectedIndexChanged += (_, _) =>
+        {
+            if (_router is null)
+                return;
+
+            // Optional runtime switch: stop graph -> re-init with other backend -> resume.
+            // Keep it simple and deterministic: restart immediately.
+            try
+            {
+                StopRouter();
+                StartRouter();
+            }
+            catch
+            {
+                // StartRouter already surfaces errors.
+            }
+        };
+
+        layout.Controls.Add(new Label { Text = "Output device", AutoSize = true }, 0, 3);
+        layout.Controls.Add(_outputDeviceCombo, 1, 3);
+
+        layout.Controls.Add(new Label { Text = "Latency input (mic/line-in)", AutoSize = true }, 0, 4);
         var latencyRow = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, AutoSize = true };
         _latencyInputCombo.Width = 360;
         latencyRow.Controls.Add(_latencyInputCombo);
         latencyRow.Controls.Add(_measureLatencyButton);
         latencyRow.Controls.Add(_latencyResultLabel);
-        layout.Controls.Add(latencyRow, 1, 3);
+        layout.Controls.Add(latencyRow, 1, 4);
 
-        layout.Controls.Add(new Label { Text = "Profile", AutoSize = true }, 0, 4);
+        layout.Controls.Add(new Label { Text = "Profile", AutoSize = true }, 0, 5);
         var profileRow = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, AutoSize = true };
         _profileCombo.Width = 240;
         profileRow.Controls.Add(_profileCombo);
@@ -1779,7 +1818,7 @@ public sealed class RouterMainForm : Form
         profileRow.Controls.Add(new Label { Text = "Poll (ms)", AutoSize = true, Padding = new Padding(6, 6, 0, 0) });
         _profilePollMs.Width = 80;
         profileRow.Controls.Add(_profilePollMs);
-        layout.Controls.Add(profileRow, 1, 4);
+        layout.Controls.Add(profileRow, 1, 5);
 
         var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, AutoSize = true };
         buttons.Controls.Add(_refreshButton);
@@ -1787,7 +1826,7 @@ public sealed class RouterMainForm : Form
         buttons.Controls.Add(_startButton);
         buttons.Controls.Add(_stopButton);
 
-        layout.Controls.Add(buttons, 1, 5);
+        layout.Controls.Add(buttons, 1, 6);
 
         _refreshButton.Click += (_, _) => RefreshDeviceLists();
         _saveButton.Click += (_, _) =>
@@ -1829,9 +1868,10 @@ public sealed class RouterMainForm : Form
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
-            RowCount = 2,
+            RowCount = 3,
             Padding = new Padding(12)
         };
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
@@ -1956,7 +1996,8 @@ public sealed class RouterMainForm : Form
         };
 
         layout.Controls.Add(buttons, 0, 0);
-        layout.Controls.Add(_diagnosticsText, 0, 1);
+        layout.Controls.Add(_inputBackendStatusText, 0, 1);
+        layout.Controls.Add(_diagnosticsText, 0, 2);
 
         page.Controls.Add(layout);
         return page;
@@ -2014,6 +2055,48 @@ public sealed class RouterMainForm : Form
         }
 
         _diagnosticsText.Text = sb.ToString();
+
+        UpdateInputBackendStatusText();
+    }
+
+    private void UpdateInputBackendStatusText()
+    {
+        if (_router is null)
+        {
+            _inputBackendStatusText.Text = "Input backend: (router stopped)";
+            return;
+        }
+
+        var sb = new StringBuilder();
+        sb.AppendLine($"Ingest requested: {_router.RequestedInputIngestMode}");
+        sb.AppendLine($"Ingest effective: {_router.EffectiveInputIngestMode}");
+        if (!string.IsNullOrWhiteSpace(_router.InputWarning))
+            sb.AppendLine($"Warning: {_router.InputWarning}");
+
+        var (game, shaker) = _router.GetInputStatus();
+        sb.AppendLine(FormatEndpoint(game));
+        if (shaker is not null)
+            sb.AppendLine(FormatEndpoint(shaker.Value));
+
+        _inputBackendStatusText.Text = sb.ToString().TrimEnd();
+    }
+
+    private static string FormatEndpoint(WasapiDualRouter.EndpointStatus ep)
+    {
+        var fillPct = ep.BufferLengthBytes <= 0 ? 0.0 : (100.0 * ep.BufferedBytes / ep.BufferLengthBytes);
+        var elapsedSec = Math.Max(0.001, (DateTime.UtcNow - ep.StartUtc).TotalSeconds);
+        var kbps = (ep.TotalBytes / elapsedSec) / 1024.0;
+        var fps = ep.TotalFrames > 0 ? (ep.TotalFrames / elapsedSec) : 0.0;
+
+        var last = ep.LastDataUtc is null ? "(never)" : ep.LastDataUtc.Value.ToLocalTime().ToString("HH:mm:ss");
+        var conn = ep.Connected ? "Connected" : "Error";
+
+        var fmt = $"{ep.SampleRate} Hz / {ep.BitsPerSample}-bit / {ep.Channels}ch";
+        var nudges = (ep.TotalNudgeDropFrames > 0 || ep.TotalNudgeInsertFrames > 0)
+            ? $" | nudges(drop={ep.TotalNudgeDropFrames}, insert={ep.TotalNudgeInsertFrames})"
+            : "";
+
+        return $"{ep.Name}: {conn} | {ep.Backend} | {fmt} | last={last} | fill={fillPct:0}% | ~{kbps:0} KB/s | errs={ep.TotalErrors} (streak {ep.ConsecutiveErrors}){nudges}";
     }
 
     private sealed record HidComboItem(string Display, string DevicePath);
@@ -3267,6 +3350,11 @@ public sealed class RouterMainForm : Form
         _suppressFormatUpdate = true;
         try
         {
+            var ingest = (_config.InputIngestMode ?? "WasapiLoopback").Trim();
+            if (ingest is not ("WasapiLoopback" or "CmvadrIoctl"))
+                ingest = "WasapiLoopback";
+            _ingestModeCombo.SelectedItem = ingest;
+
             // Virtual inputs: typed names (not enumerated)
             _musicDeviceCombo.Text = string.IsNullOrWhiteSpace(_config.MusicInputRenderDevice)
                 ? VirtualInputNames.DefaultInputA
@@ -3461,6 +3549,9 @@ public sealed class RouterMainForm : Form
 
     private void SaveConfigFromControls(bool showSavedDialog = true)
     {
+        var ingest = _ingestModeCombo.SelectedItem as string;
+        _config.InputIngestMode = ingest is "WasapiLoopback" or "CmvadrIoctl" ? ingest : "WasapiLoopback";
+
         var inputA = (_musicDeviceCombo.Text ?? string.Empty).Trim();
         if (string.IsNullOrWhiteSpace(inputA))
             inputA = VirtualInputNames.DefaultInputA;
@@ -3658,6 +3749,11 @@ public sealed class RouterMainForm : Form
             healthText = "Ready: select devices, pick a preset, press Start";
             healthColor = NeonTheme.TextMuted;
         }
+        else if (!string.IsNullOrWhiteSpace(_router?.InputWarning))
+        {
+            healthText = $"Warning: {_router!.InputWarning}";
+            healthColor = cWarn;
+        }
         else if (!gameDetected)
         {
             healthText = "Warning: routing active – no audio from Game Source";
@@ -3688,6 +3784,8 @@ public sealed class RouterMainForm : Form
         _statusFormat.Text = $"Output: {(string.IsNullOrWhiteSpace(outDev) ? "(not selected)" : outDev)} | {sr} Hz | {mode}";
         _statusLatency.Text = $"Latency: {(int)_latencyMs.Value} ms | Mix: {_mixingModeCombo.SelectedItem}";
         _statusPreset.Text = string.IsNullOrWhiteSpace(preset) ? "Preset" : $"Preset: {preset}";
+
+        UpdateInputBackendStatusText();
 
         _assistant.UpdateSnapshot(BuildCopilotContext());
     }

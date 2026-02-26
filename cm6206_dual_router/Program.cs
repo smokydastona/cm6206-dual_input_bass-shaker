@@ -1,4 +1,5 @@
 using System.CommandLine;
+using System.CommandLine.Invocation;
 using System.Windows.Forms;
 
 namespace Cm6206DualRouter;
@@ -107,7 +108,24 @@ internal static class Program
 
         var probeCmvadrOption = new Option<bool>(
             name: "--probe-cmvadr",
-            description: "Probe the CMVADR virtual driver endpoints (\\\\.\\CMVADR_Game / \\\\.\\CMVADR_Shaker) and print formats");
+            description: "Probe the CMVADR virtual driver endpoints (\\.\\CMVADR_Game / \\.\\CMVADR_Shaker) and print formats");
+
+        var validateOption = new Option<bool>(
+            name: "--validate",
+            description: "Validate config + devices by constructing and starting the router briefly, then printing input status and exiting");
+
+        var runForSecondsOption = new Option<int?>(
+            name: "--run-for-sec",
+            description: "Run for N seconds then stop automatically (headless mode)");
+
+        var statusIntervalMsOption = new Option<int>(
+            name: "--status-interval-ms",
+            getDefaultValue: () => 1000,
+            description: "In headless mode, print input status every N ms (0 disables)");
+
+        var exportUiBundleOption = new Option<string?>(
+            name: "--export-ui-bundle",
+            description: "Export a Minecraft UI bundle folder containing Neon style/tokens/assets (neon_style.json, neon_animation.json, arrow icons) and exit");
 
         var root = new RootCommand("CM6206 Dual Virtual Router (2 virtual outputs -> 1 CM6206 7.1)");
         root.AddOption(configOption);
@@ -115,10 +133,61 @@ internal static class Program
         root.AddOption(showFormatsOption);
         root.AddOption(uiOption);
         root.AddOption(probeCmvadrOption);
+        root.AddOption(validateOption);
+        root.AddOption(runForSecondsOption);
+        root.AddOption(statusIntervalMsOption);
+        root.AddOption(exportUiBundleOption);
 
-        root.SetHandler((configPath, listDevices, showFormats, ui, probeCmvadr) =>
+        static string FormatEndpoint(WasapiDualRouter.EndpointStatus ep)
         {
-            AppLog.Info($"Command handler invoked: ui={ui}, listDevices={listDevices}, configPath={configPath}");
+            var fillPct = ep.BufferLengthBytes <= 0 ? 0.0 : (100.0 * ep.BufferedBytes / ep.BufferLengthBytes);
+            var last = ep.LastDataUtc is null ? "(never)" : ep.LastDataUtc.Value.ToLocalTime().ToString("HH:mm:ss");
+            var conn = ep.Connected ? "Connected" : "Error";
+            var fmt = $"{ep.SampleRate} Hz / {ep.BitsPerSample}-bit / {ep.Channels}ch";
+
+            var nudges = (ep.TotalNudgeDropFrames > 0 || ep.TotalNudgeInsertFrames > 0)
+                ? $" | nudges(drop={ep.TotalNudgeDropFrames}, insert={ep.TotalNudgeInsertFrames})"
+                : "";
+
+            return $"{ep.Name}: {conn} | {ep.Backend} | {fmt} | last={last} | fill={fillPct:0}% | errs={ep.TotalErrors} (streak {ep.ConsecutiveErrors}){nudges}";
+        }
+
+        static void PrintInputStatus(WasapiDualRouter router)
+        {
+            Console.WriteLine($"Ingest requested: {router.RequestedInputIngestMode}");
+            Console.WriteLine($"Ingest effective: {router.EffectiveInputIngestMode}");
+            if (!string.IsNullOrWhiteSpace(router.InputWarning))
+                Console.WriteLine($"Warning: {router.InputWarning}");
+
+            var (game, shaker) = router.GetInputStatus();
+            Console.WriteLine(FormatEndpoint(game));
+            if (shaker is not null)
+                Console.WriteLine(FormatEndpoint(shaker.Value));
+        }
+
+        root.SetHandler((InvocationContext ctx) =>
+        {
+            try
+            {
+                var configPath = ctx.ParseResult.GetValueForOption(configOption) ?? "router.json";
+                var listDevices = ctx.ParseResult.GetValueForOption(listDevicesOption);
+                var showFormats = ctx.ParseResult.GetValueForOption(showFormatsOption);
+                var ui = ctx.ParseResult.GetValueForOption(uiOption);
+                var probeCmvadr = ctx.ParseResult.GetValueForOption(probeCmvadrOption);
+                var validate = ctx.ParseResult.GetValueForOption(validateOption);
+                var runForSec = ctx.ParseResult.GetValueForOption(runForSecondsOption);
+                var statusIntervalMs = ctx.ParseResult.GetValueForOption(statusIntervalMsOption);
+                var exportUiBundleDir = ctx.ParseResult.GetValueForOption(exportUiBundleOption);
+
+                AppLog.Info($"Command handler invoked: ui={ui}, listDevices={listDevices}, configPath={configPath}");
+
+                if (!string.IsNullOrWhiteSpace(exportUiBundleDir))
+                {
+                    UiBundleExporter.ExportNeonBundle(exportUiBundleDir);
+                    Console.WriteLine($"Exported Neon UI bundle to: {Path.GetFullPath(exportUiBundleDir)}");
+                    return;
+                }
+
             if (listDevices)
             {
                 DeviceHelper.PrintRenderDevices(showFormats);
@@ -210,11 +279,59 @@ internal static class Program
             };
 
             router.Start();
+
+            if (validate)
+            {
+                Thread.Sleep(750);
+                PrintInputStatus(router);
+                router.Stop();
+                router.WaitUntilStopped();
+                return;
+            }
+
+            var intervalMs = Math.Max(0, statusIntervalMs);
+            DateTime? stopAtUtc = null;
+            if (runForSec is int sec && sec > 0)
+                stopAtUtc = DateTime.UtcNow.AddSeconds(sec);
+
             Console.WriteLine("Running. Press Ctrl+C to stop.");
 
+            while (true)
+            {
+                if (stopAtUtc is not null && DateTime.UtcNow >= stopAtUtc.Value)
+                {
+                    router.Stop();
+                    break;
+                }
+
+                if (intervalMs > 0)
+                {
+                    Console.WriteLine();
+                    Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] status");
+                    PrintInputStatus(router);
+                    Thread.Sleep(intervalMs);
+                    continue;
+                }
+
+                // status printing disabled; just block.
+                router.WaitUntilStopped();
+                break;
+            }
+
             router.WaitUntilStopped();
-        },
-        configOption, listDevicesOption, showFormatsOption, uiOption, probeCmvadrOption);
+                return;
+            }
+            catch (Exception ex)
+            {
+                Environment.ExitCode = 1;
+                Console.Error.WriteLine($"Error: {ex.Message}");
+                if (ex is InvalidOperationException && ex.Message.Contains("Use --list-devices", StringComparison.OrdinalIgnoreCase))
+                    Console.Error.WriteLine("Tip: run with --list-devices and copy/paste the exact device name into router.json.");
+
+                AppLog.Warn($"CLI handler failed: {ex}");
+                return;
+            }
+        });
 
         try
         {

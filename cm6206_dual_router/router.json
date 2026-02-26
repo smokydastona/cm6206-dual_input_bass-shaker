@@ -41,6 +41,12 @@
   "shakerHighPassHz": 20.0,
   "shakerLowPassHz": 80.0,
 
+  // Timing drift correction for the Shaker input.
+  // Keeps the upstream Shaker buffer near a target fill level by applying tiny speed-up/slow-down nudges.
+  "shakerNudgesEnabled": true,
+  "shakerNudgeTargetBufferMs": 250,
+  "shakerNudgeDeadbandMs": 50,
+
   "musicHighPassHz": null,
   "musicLowPassHz": null,
 

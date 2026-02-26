@@ -10,24 +10,25 @@ public sealed class WasapiDualRouter : IDisposable
 {
     private RouterConfig _config;
 
+    private readonly DateTime _startUtc = DateTime.UtcNow;
+
     public int EffectiveSampleRate => _config.SampleRate;
     public string? FormatWarning { get; }
 
-    private readonly MMDevice? _musicDevice;
-    private readonly MMDevice? _shakerDevice;
+    public string RequestedInputIngestMode { get; }
+    public string EffectiveInputIngestMode { get; }
+    public string? InputWarning { get; }
+
+    private readonly IAudioInputBackend _inputBackend;
+
     private readonly MMDevice _outputDevice;
-
-    private readonly WasapiLoopbackCapture? _musicCapture;
-    private readonly WasapiLoopbackCapture? _shakerCapture;
-
-    private readonly CmvadrIoctlInput? _musicIoctl;
-    private readonly CmvadrIoctlInput? _shakerIoctl;
 
     private readonly BufferedWaveProvider _musicBuffer;
     private readonly BufferedWaveProvider? _shakerBuffer;
 
     private readonly BstTelemetryHapticsSampleProvider? _telemetryShaker;
     private readonly AutoFallbackShakerSampleProvider? _autoFallbackShaker;
+    private readonly TimeNudgeSampleProvider? _shakerNudger;
 
     private readonly WasapiOut _output;
     private readonly ManualResetEventSlim _stopped = new(false);
@@ -48,20 +49,47 @@ public sealed class WasapiDualRouter : IDisposable
         var useTelemetryHaptics = _config.TelemetryHapticsEnabled;
         var useShakerInputDevice = !string.IsNullOrWhiteSpace(config.ShakerInputRenderDevice);
 
-        var ingest = (_config.InputIngestMode ?? "WasapiLoopback").Trim();
+        RequestedInputIngestMode = (_config.InputIngestMode ?? "WasapiLoopback").Trim();
+        var ingest = RequestedInputIngestMode;
+        string? warning = null;
 
-        if (ingest == "WasapiLoopback")
+        Func<bool> shouldStop = () => Volatile.Read(ref _stopRequested) != 0;
+        Action requestStop = Stop;
+
+        if (ingest == "CmvadrIoctl")
         {
-            _musicDevice = DeviceHelper.GetRenderDeviceByFriendlyName(config.MusicInputRenderDevice);
-            if (useShakerInputDevice)
-                _shakerDevice = DeviceHelper.GetRenderDeviceByFriendlyName(config.ShakerInputRenderDevice);
+            try
+            {
+                _inputBackend = new CmvadrIoctlBackend(useShakerInputDevice);
+            }
+            catch (Exception ex)
+            {
+                // Auto-fallback to loopback if CMVADR is unavailable.
+                warning = $"CMVADR input failed; falling back to WASAPI loopback. ({ex.Message})";
+                ingest = "WasapiLoopback";
+                _inputBackend = new WasapiLoopbackBackend(
+                    musicInputRenderDevice: config.MusicInputRenderDevice,
+                    shakerInputRenderDevice: useShakerInputDevice ? config.ShakerInputRenderDevice : null,
+                    startUtc: _startUtc,
+                    shouldStop: shouldStop,
+                    requestStop: requestStop);
+            }
         }
         else
         {
-            _musicIoctl = CmvadrIoctlInput.Open(VirtualAudioDriverIoctl.GameDeviceWin32Path);
-            if (useShakerInputDevice)
-                _shakerIoctl = CmvadrIoctlInput.Open(VirtualAudioDriverIoctl.ShakerDeviceWin32Path);
+            _inputBackend = new WasapiLoopbackBackend(
+                musicInputRenderDevice: config.MusicInputRenderDevice,
+                shakerInputRenderDevice: useShakerInputDevice ? config.ShakerInputRenderDevice : null,
+                startUtc: _startUtc,
+                shouldStop: shouldStop,
+                requestStop: requestStop);
         }
+
+        EffectiveInputIngestMode = ingest;
+        InputWarning = warning;
+
+        _musicBuffer = _inputBackend.MusicBuffer;
+        _shakerBuffer = _inputBackend.ShakerBuffer;
 
         _outputDevice = DeviceHelper.GetRenderDeviceByFriendlyName(config.OutputRenderDevice);
 
@@ -69,60 +97,6 @@ public sealed class WasapiDualRouter : IDisposable
         var negotiation = OutputFormatNegotiator.Negotiate(_config, _outputDevice);
         _config = negotiation.EffectiveConfig;
         FormatWarning = negotiation.Warning;
-
-        if (ingest == "WasapiLoopback")
-        {
-            if (_musicDevice is null)
-                throw new InvalidOperationException("music device was not resolved");
-
-            _musicCapture = new WasapiLoopbackCapture(_musicDevice);
-            if (_shakerDevice is not null)
-                _shakerCapture = new WasapiLoopbackCapture(_shakerDevice);
-
-            _musicBuffer = new BufferedWaveProvider(_musicCapture.WaveFormat)
-            {
-                DiscardOnBufferOverflow = true,
-                BufferDuration = TimeSpan.FromSeconds(2)
-            };
-
-            if (_shakerCapture is not null)
-            {
-                _shakerBuffer = new BufferedWaveProvider(_shakerCapture.WaveFormat)
-                {
-                    DiscardOnBufferOverflow = true,
-                    BufferDuration = TimeSpan.FromSeconds(2)
-                };
-            }
-
-            _musicCapture.DataAvailable += (_, e) =>
-            {
-                if (Volatile.Read(ref _stopRequested) != 0) return;
-                _musicBuffer.AddSamples(e.Buffer, 0, e.BytesRecorded);
-            };
-
-            if (_shakerCapture is not null && _shakerBuffer is not null)
-            {
-                _shakerCapture.DataAvailable += (_, e) =>
-                {
-                    if (Volatile.Read(ref _stopRequested) != 0) return;
-                    _shakerBuffer.AddSamples(e.Buffer, 0, e.BytesRecorded);
-                };
-            }
-
-            _musicCapture.RecordingStopped += (_, __) => Stop();
-            if (_shakerCapture is not null)
-                _shakerCapture.RecordingStopped += (_, __) => Stop();
-        }
-        else
-        {
-            if (_musicIoctl is null)
-                throw new InvalidOperationException("CMVADR game input was not opened");
-
-            _musicBuffer = _musicIoctl.Buffer;
-
-            if (_shakerIoctl is not null)
-                _shakerBuffer = _shakerIoctl.Buffer;
-        }
 
         var outputFormat = WaveFormatFactory.Create7Point1Float(_config.SampleRate);
 
@@ -132,6 +106,23 @@ public sealed class WasapiDualRouter : IDisposable
         var music = BuildMusicProvider(_musicBuffer.ToSampleProvider(), _config.SampleRate);
         ISampleProvider shakerStereo;
 
+        Func<double?> shakerUpstreamBufferMs = () =>
+        {
+            if (_shakerBuffer is null)
+                return null;
+
+            var fmt = _shakerBuffer.WaveFormat;
+            var bytesPerFrame = (fmt.Channels * fmt.BitsPerSample) / 8;
+            if (bytesPerFrame <= 0 || fmt.SampleRate <= 0)
+                return null;
+
+            var bytesPerSec = (double)(fmt.SampleRate * bytesPerFrame);
+            if (bytesPerSec <= 1)
+                return null;
+
+            return 1000.0 * _shakerBuffer.BufferedBytes / bytesPerSec;
+        };
+
         if (useTelemetryHaptics)
         {
             _telemetryShaker = new BstTelemetryHapticsSampleProvider(_config);
@@ -139,6 +130,16 @@ public sealed class WasapiDualRouter : IDisposable
             if (_shakerBuffer is not null)
             {
                 var fallback = BuildStereoProvider(_shakerBuffer.ToSampleProvider(), _config.SampleRate);
+                if (_config.ShakerNudgesEnabled)
+                {
+                    _shakerNudger = new TimeNudgeSampleProvider(
+                        fallback,
+                        shakerUpstreamBufferMs,
+                        targetBufferMs: _config.ShakerNudgeTargetBufferMs,
+                        deadbandMs: _config.ShakerNudgeDeadbandMs);
+                    fallback = _shakerNudger;
+                }
+
                 _autoFallbackShaker = new AutoFallbackShakerSampleProvider(
                     primary: _telemetryShaker,
                     fallback: fallback,
@@ -153,7 +154,20 @@ public sealed class WasapiDualRouter : IDisposable
         }
         else if (_shakerBuffer is not null)
         {
-            shakerStereo = BuildStereoProvider(_shakerBuffer.ToSampleProvider(), _config.SampleRate);
+            var shaker = BuildStereoProvider(_shakerBuffer.ToSampleProvider(), _config.SampleRate);
+            if (_config.ShakerNudgesEnabled)
+            {
+                _shakerNudger = new TimeNudgeSampleProvider(
+                    shaker,
+                    shakerUpstreamBufferMs,
+                    targetBufferMs: _config.ShakerNudgeTargetBufferMs,
+                    deadbandMs: _config.ShakerNudgeDeadbandMs);
+                shakerStereo = _shakerNudger;
+            }
+            else
+            {
+                shakerStereo = shaker;
+            }
         }
         else
         {
@@ -209,15 +223,45 @@ public sealed class WasapiDualRouter : IDisposable
         _output.Init(waveProvider);
     }
 
+    public readonly record struct EndpointStatus(
+        string Name,
+        string Backend,
+        DateTime StartUtc,
+        int SampleRate,
+        int Channels,
+        int BitsPerSample,
+        bool Connected,
+        DateTime? LastDataUtc,
+        int BufferedBytes,
+        int BufferLengthBytes,
+        long TotalBytes,
+        long TotalFrames,
+        long TotalErrors,
+        int ConsecutiveErrors,
+        long TotalNudgeDropFrames,
+        long TotalNudgeInsertFrames);
+
+    public (EndpointStatus Game, EndpointStatus? Shaker) GetInputStatus()
+    {
+        var (game, shaker) = _inputBackend.GetInputStatus();
+
+        if (shaker is not null && _shakerNudger is not null)
+        {
+            shaker = shaker.Value with
+            {
+                TotalNudgeDropFrames = _shakerNudger.TotalDropFrames,
+                TotalNudgeInsertFrames = _shakerNudger.TotalInsertFrames
+            };
+        }
+
+        return (game, shaker);
+    }
+
     public void Start()
     {
         _stopped.Reset();
 
-        _musicIoctl?.Start();
-        _shakerIoctl?.Start();
-
-        _musicCapture?.StartRecording();
-        _shakerCapture?.StartRecording();
+        _inputBackend.Start();
         _output.Play();
     }
 
@@ -227,11 +271,7 @@ public sealed class WasapiDualRouter : IDisposable
             return;
 
         try { _output.Stop(); } catch { /* ignore */ }
-        try { _musicCapture?.StopRecording(); } catch { /* ignore */ }
-        try { _shakerCapture?.StopRecording(); } catch { /* ignore */ }
-
-        try { _musicIoctl?.Stop(); } catch { /* ignore */ }
-        try { _shakerIoctl?.Stop(); } catch { /* ignore */ }
+        try { _inputBackend.Stop(); } catch { /* ignore */ }
 
         _stopped.Set();
     }
@@ -243,14 +283,247 @@ public sealed class WasapiDualRouter : IDisposable
         Stop();
         _output.Dispose();
         _telemetryShaker?.Dispose();
-        _musicCapture?.Dispose();
-        _shakerCapture?.Dispose();
-        _musicIoctl?.Dispose();
-        _shakerIoctl?.Dispose();
-        _musicDevice?.Dispose();
-        _shakerDevice?.Dispose();
+        _inputBackend.Dispose();
         _outputDevice.Dispose();
         _stopped.Dispose();
+    }
+
+    private interface IAudioInputBackend : IDisposable
+    {
+        BufferedWaveProvider MusicBuffer { get; }
+        BufferedWaveProvider? ShakerBuffer { get; }
+
+        void Start();
+        void Stop();
+        (EndpointStatus Game, EndpointStatus? Shaker) GetInputStatus();
+    }
+
+    private sealed class WasapiLoopbackBackend : IAudioInputBackend
+    {
+        private readonly DateTime _startUtc;
+        private readonly Func<bool> _shouldStop;
+        private readonly Action _requestStop;
+
+        private readonly MMDevice _musicDevice;
+        private readonly MMDevice? _shakerDevice;
+
+        private readonly WasapiLoopbackCapture _musicCapture;
+        private readonly WasapiLoopbackCapture? _shakerCapture;
+
+        private DateTime? _lastMusicCaptureUtc;
+        private DateTime? _lastShakerCaptureUtc;
+        private long _musicCaptureBytes;
+        private long _shakerCaptureBytes;
+
+        public BufferedWaveProvider MusicBuffer { get; }
+        public BufferedWaveProvider? ShakerBuffer { get; }
+
+        public WasapiLoopbackBackend(
+            string musicInputRenderDevice,
+            string? shakerInputRenderDevice,
+            DateTime startUtc,
+            Func<bool> shouldStop,
+            Action requestStop)
+        {
+            _startUtc = startUtc;
+            _shouldStop = shouldStop;
+            _requestStop = requestStop;
+
+            _musicDevice = DeviceHelper.GetRenderDeviceByFriendlyName(musicInputRenderDevice);
+            if (!string.IsNullOrWhiteSpace(shakerInputRenderDevice))
+                _shakerDevice = DeviceHelper.GetRenderDeviceByFriendlyName(shakerInputRenderDevice);
+
+            _musicCapture = new WasapiLoopbackCapture(_musicDevice);
+            if (_shakerDevice is not null)
+                _shakerCapture = new WasapiLoopbackCapture(_shakerDevice);
+
+            MusicBuffer = new BufferedWaveProvider(_musicCapture.WaveFormat)
+            {
+                DiscardOnBufferOverflow = true,
+                BufferDuration = TimeSpan.FromSeconds(2)
+            };
+
+            if (_shakerCapture is not null)
+            {
+                ShakerBuffer = new BufferedWaveProvider(_shakerCapture.WaveFormat)
+                {
+                    DiscardOnBufferOverflow = true,
+                    BufferDuration = TimeSpan.FromSeconds(2)
+                };
+            }
+
+            _musicCapture.DataAvailable += (_, e) =>
+            {
+                if (_shouldStop()) return;
+                _lastMusicCaptureUtc = DateTime.UtcNow;
+                _musicCaptureBytes += e.BytesRecorded;
+                MusicBuffer.AddSamples(e.Buffer, 0, e.BytesRecorded);
+            };
+
+            if (_shakerCapture is not null && ShakerBuffer is not null)
+            {
+                _shakerCapture.DataAvailable += (_, e) =>
+                {
+                    if (_shouldStop()) return;
+                    _lastShakerCaptureUtc = DateTime.UtcNow;
+                    _shakerCaptureBytes += e.BytesRecorded;
+                    ShakerBuffer.AddSamples(e.Buffer, 0, e.BytesRecorded);
+                };
+            }
+
+            _musicCapture.RecordingStopped += (_, __) => _requestStop();
+            if (_shakerCapture is not null)
+                _shakerCapture.RecordingStopped += (_, __) => _requestStop();
+        }
+
+        public void Start()
+        {
+            _musicCapture.StartRecording();
+            _shakerCapture?.StartRecording();
+        }
+
+        public void Stop()
+        {
+            try { _musicCapture.StopRecording(); } catch { /* ignore */ }
+            try { _shakerCapture?.StopRecording(); } catch { /* ignore */ }
+        }
+
+        public (EndpointStatus Game, EndpointStatus? Shaker) GetInputStatus()
+        {
+            // WASAPI loopback: best-effort (no IOCTL stats).
+            var fmt = MusicBuffer.WaveFormat;
+            var gameEp = new EndpointStatus(
+                Name: "Game",
+                Backend: "Loopback",
+                StartUtc: _startUtc,
+                SampleRate: fmt.SampleRate,
+                Channels: fmt.Channels,
+                BitsPerSample: fmt.BitsPerSample,
+                Connected: true,
+                LastDataUtc: _lastMusicCaptureUtc,
+                BufferedBytes: MusicBuffer.BufferedBytes,
+                BufferLengthBytes: MusicBuffer.BufferLength,
+                TotalBytes: _musicCaptureBytes,
+                TotalFrames: 0,
+                TotalErrors: 0,
+                ConsecutiveErrors: 0,
+                TotalNudgeDropFrames: 0,
+                TotalNudgeInsertFrames: 0);
+
+            EndpointStatus? shakerEp = null;
+            if (ShakerBuffer is not null)
+            {
+                var sfmt = ShakerBuffer.WaveFormat;
+                shakerEp = new EndpointStatus(
+                    Name: "Shaker",
+                    Backend: "Loopback",
+                    StartUtc: _startUtc,
+                    SampleRate: sfmt.SampleRate,
+                    Channels: sfmt.Channels,
+                    BitsPerSample: sfmt.BitsPerSample,
+                    Connected: true,
+                    LastDataUtc: _lastShakerCaptureUtc,
+                    BufferedBytes: ShakerBuffer.BufferedBytes,
+                    BufferLengthBytes: ShakerBuffer.BufferLength,
+                    TotalBytes: _shakerCaptureBytes,
+                    TotalFrames: 0,
+                    TotalErrors: 0,
+                    ConsecutiveErrors: 0,
+                    TotalNudgeDropFrames: 0,
+                    TotalNudgeInsertFrames: 0);
+            }
+
+            return (gameEp, shakerEp);
+        }
+
+        public void Dispose()
+        {
+            _musicCapture.Dispose();
+            _shakerCapture?.Dispose();
+            _musicDevice.Dispose();
+            _shakerDevice?.Dispose();
+        }
+    }
+
+    private sealed class CmvadrIoctlBackend : IAudioInputBackend
+    {
+        private readonly CmvadrIoctlInput _musicIoctl;
+        private readonly CmvadrIoctlInput? _shakerIoctl;
+
+        public BufferedWaveProvider MusicBuffer => _musicIoctl.Buffer;
+        public BufferedWaveProvider? ShakerBuffer => _shakerIoctl?.Buffer;
+
+        public CmvadrIoctlBackend(bool useShaker)
+        {
+            _musicIoctl = CmvadrIoctlInput.Open(VirtualAudioDriverIoctl.GameDeviceWin32Path);
+            if (useShaker)
+                _shakerIoctl = CmvadrIoctlInput.Open(VirtualAudioDriverIoctl.ShakerDeviceWin32Path);
+        }
+
+        public void Start()
+        {
+            _musicIoctl.Start();
+            _shakerIoctl?.Start();
+        }
+
+        public void Stop()
+        {
+            _musicIoctl.Stop();
+            _shakerIoctl?.Stop();
+        }
+
+        public (EndpointStatus Game, EndpointStatus? Shaker) GetInputStatus()
+        {
+            var g = _musicIoctl.GetStatusSnapshot();
+            EndpointStatus? s = null;
+            if (_shakerIoctl is not null)
+            {
+                var sh = _shakerIoctl.GetStatusSnapshot();
+                s = new EndpointStatus(
+                    Name: "Shaker",
+                    Backend: "CMVADR",
+                    StartUtc: sh.StartUtc,
+                    SampleRate: (int)sh.Format.SampleRate,
+                    Channels: (int)sh.Format.Channels,
+                    BitsPerSample: (int)sh.Format.BitsPerSample,
+                    Connected: sh.ConsecutiveIoctlFailures == 0,
+                    LastDataUtc: sh.LastSuccessfulReadUtc,
+                    BufferedBytes: sh.BufferedBytes,
+                    BufferLengthBytes: sh.BufferLengthBytes,
+                    TotalBytes: sh.TotalBytesRead,
+                    TotalFrames: sh.TotalFramesRead,
+                    TotalErrors: sh.TotalIoctlFailures,
+                    ConsecutiveErrors: sh.ConsecutiveIoctlFailures,
+                    TotalNudgeDropFrames: 0,
+                    TotalNudgeInsertFrames: 0);
+            }
+
+            var game = new EndpointStatus(
+                Name: "Game",
+                Backend: "CMVADR",
+                StartUtc: g.StartUtc,
+                SampleRate: (int)g.Format.SampleRate,
+                Channels: (int)g.Format.Channels,
+                BitsPerSample: (int)g.Format.BitsPerSample,
+                Connected: g.ConsecutiveIoctlFailures == 0,
+                LastDataUtc: g.LastSuccessfulReadUtc,
+                BufferedBytes: g.BufferedBytes,
+                BufferLengthBytes: g.BufferLengthBytes,
+                TotalBytes: g.TotalBytesRead,
+                TotalFrames: g.TotalFramesRead,
+                TotalErrors: g.TotalIoctlFailures,
+                ConsecutiveErrors: g.ConsecutiveIoctlFailures,
+                TotalNudgeDropFrames: 0,
+                TotalNudgeInsertFrames: 0);
+
+            return (game, s);
+        }
+
+        public void Dispose()
+        {
+            _musicIoctl.Dispose();
+            _shakerIoctl?.Dispose();
+        }
     }
 
     private static ISampleProvider BuildStereoProvider(ISampleProvider source, int targetSampleRate)
