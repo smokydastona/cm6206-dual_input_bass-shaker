@@ -20,3 +20,8 @@ Installer behavior:
 Notes:
 - Driver artifacts are intentionally allowed in git under `virtual_audio_driver_payload/` (see `.gitignore`).
 - During development you’ll typically install on a VM with test signing enabled.
+
+Workflow helper:
+- Driver source/workspace is included as a submodule under `external/dual-cm6206-driver/`.
+- After building/signing the driver, sync artifacts into this folder:
+	- `powershell -ExecutionPolicy Bypass -File scripts/sync_cmvadr_payload.ps1`

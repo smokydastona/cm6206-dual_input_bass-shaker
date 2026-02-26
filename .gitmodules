@@ -1,0 +1,3 @@
+[submodule "external/dual-cm6206-driver"]
+	path = external/dual-cm6206-driver
+	url = https://github.com/smokydastona/dual-cm6206-driver.git

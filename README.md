@@ -12,6 +12,12 @@ Planned implementation (virtual driver track):
 - Provide two dedicated virtual playback devices via a SysVAD/WaveRT kernel driver (`Virtual Game Audio` / `Virtual Shaker Audio`).
 - The router ingests audio via a driver interface (shared memory / IOCTL) instead of loopback capture.
 
+Driver repo / packaging model:
+- The virtual driver source lives in a **separate repo** and is included here as a git submodule under `external/dual-cm6206-driver/`.
+- This repo only commits the **installer payload** artifacts under `virtual_audio_driver_payload/WIN10/Driver/` (e.g. `CMVADR.inf/.sys/.cat`).
+- After building/signing the driver, sync artifacts into the payload folder with:
+	- `powershell -ExecutionPolicy Bypass -File scripts/sync_cmvadr_payload.ps1`
+
 It’s designed to avoid driver/registry hacks and to not fight Windows default-device behavior. You choose your endpoints and the app routes audio.
 
 Note: creating *new* playback devices requires a signed driver. Current releases assume you already have virtual endpoints (Voicemeeter/VB-CABLE/etc.). There’s a SysVAD-based driver plan here: `docs/virtual_audio_driver/00_plan.md`.
