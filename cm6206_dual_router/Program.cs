@@ -10,6 +10,8 @@ internal static class Program
     {
         AppLog.Initialize();
 
+        SingleInstanceCoordinator? singleInstance = null;
+
         try
         {
             AppLog.Info($"Args(original)={string.Join(" ", args.Select(a => a.Contains(' ') ? $"\"{a}\"" : a))}");
@@ -43,6 +45,39 @@ internal static class Program
         // (headless mode is still available by providing --config without --ui).
         if (args.Length == 0)
             args = ["--ui"];
+
+        // Ensure only a single instance runs. If a second instance is launched, signal the
+        // primary instance to bring its window to front and then exit immediately.
+        try
+        {
+            const string appId = "Cm6206DualRouter";
+            if (!SingleInstanceCoordinator.TryCreate(appId, out singleInstance))
+            {
+                // Best-effort activation; even if it fails, still exit.
+                try
+                {
+                    var sid = System.Security.Principal.WindowsIdentity.GetCurrent().User?.Value ?? Environment.UserName;
+                    var pipeName = $"{appId}:{sid}";
+                    using var client = new System.IO.Pipes.NamedPipeClientStream(".", pipeName, System.IO.Pipes.PipeDirection.Out);
+                    client.Connect(250);
+                    client.Write(System.Text.Encoding.UTF8.GetBytes("activate\n"));
+                    client.Flush();
+                }
+                catch
+                {
+                    // ignore
+                }
+
+                AppLog.Info("Another instance is already running; exiting.");
+                return 0;
+            }
+        }
+        catch (Exception ex)
+        {
+            // If single-instance enforcement fails unexpectedly, continue rather than
+            // blocking startup.
+            AppLog.Warn($"Single-instance check failed: {ex.Message}");
+        }
 
         try
         {
@@ -98,6 +133,28 @@ internal static class Program
                 AppLog.Info("Smoke-test Form created OK.");
 
                 var form = new AaaMainForm(configPath);
+
+                // If another instance is launched, bring this window to the foreground.
+                singleInstance?.StartActivationServer(() =>
+                {
+                    try
+                    {
+                        if (form.IsDisposed) return;
+                        form.BeginInvoke(new Action(() =>
+                        {
+                            if (form.WindowState == FormWindowState.Minimized)
+                                form.WindowState = FormWindowState.Normal;
+                            form.Show();
+                            form.BringToFront();
+                            form.Activate();
+                        }));
+                    }
+                    catch
+                    {
+                        // ignore
+                    }
+                });
+
                 AppLog.Info("AaaMainForm created; entering Application.Run...");
                 Application.Run(form);
                 AppLog.Info("Application.Run returned; exiting UI mode.");
@@ -133,6 +190,10 @@ internal static class Program
             var path = AppLog.Crash(ex, "Program.Main");
             TryShowCrashDialog(path, ex);
             return 1;
+        }
+        finally
+        {
+            singleInstance?.Dispose();
         }
     }
 
