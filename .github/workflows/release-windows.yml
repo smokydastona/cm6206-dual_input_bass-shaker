@@ -104,9 +104,12 @@ jobs:
       - name: Sign published EXE (optional)
         shell: pwsh
         env:
-          CODESIGN_PFX_BASE64: ${{ secrets['CODESIGN_PFX_BASE64'] }}
-          CODESIGN_PFX_PASSWORD: ${{ secrets['CODESIGN_PFX_PASSWORD'] }}
-          CODESIGN_TIMESTAMP_URL: ${{ secrets['CODESIGN_TIMESTAMP_URL'] }}
+          # NOTE: Some editors/linters warn that `secrets.*` contexts are "invalid".
+          # This is expected locally because they cannot see your repo's configured secrets.
+          # In GitHub Actions, these resolve correctly when the secrets exist.
+          CODESIGN_PFX_BASE64: ${{ secrets.CODESIGN_PFX_BASE64 }}
+          CODESIGN_PFX_PASSWORD: ${{ secrets.CODESIGN_PFX_PASSWORD }}
+          CODESIGN_TIMESTAMP_URL: ${{ secrets.CODESIGN_TIMESTAMP_URL }}
         run: |
           $ErrorActionPreference = 'Stop'
 

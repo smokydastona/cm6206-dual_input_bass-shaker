@@ -1,4 +1,5 @@
 using NAudio.CoreAudioApi;
+using NAudio.Wave;
 
 namespace Cm6206DualRouter;
 
@@ -7,7 +8,65 @@ public static class DeviceHelper
     public const string DefaultSystemRenderDevice = "Default Game Output";
     public const string NoneDevice = "(None)";
 
-    public static void PrintRenderDevices()
+    public static string? TryFindLikelyCm6206OutputRenderDeviceFriendlyName()
+    {
+        try
+        {
+            using var enumerator = new MMDeviceEnumerator();
+            var devices = enumerator.EnumerateAudioEndPoints(DataFlow.Render, DeviceState.Active);
+
+            static bool HasAny(string s, params string[] needles)
+                => needles.Any(n => s.Contains(n, StringComparison.OrdinalIgnoreCase));
+
+            // Highest confidence: looks like the generic CMUAC name + is configured to 7.1 (8ch mix).
+            string? best8Ch = null;
+            string? bestAny = null;
+
+            foreach (var d in devices)
+            {
+                var name = d.FriendlyName ?? string.Empty;
+                if (string.IsNullOrWhiteSpace(name))
+                    continue;
+
+                // Typical CM6206-class adapters show up as generic USB audio class speakers.
+                var looksLikeCm6206 = HasAny(
+                    name,
+                    "CM6206",
+                    "C-Media",
+                    "CMedia",
+                    "USB Audio Class 1.0 and 2.0 Device Driver",
+                    "USB 7.1",
+                    "USB Audio");
+
+                if (!looksLikeCm6206)
+                    continue;
+
+                bestAny ??= name;
+
+                try
+                {
+                    var mix = d.AudioClient?.MixFormat;
+                    if (mix is not null && mix.Channels == 8)
+                    {
+                        best8Ch = name;
+                        break;
+                    }
+                }
+                catch
+                {
+                    // ignore per-device probing failures
+                }
+            }
+
+            return best8Ch ?? bestAny;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    public static void PrintRenderDevices(bool showFormats)
     {
         using var enumerator = new MMDeviceEnumerator();
         var devices = enumerator.EnumerateAudioEndPoints(DataFlow.Render, DeviceState.Active);
@@ -15,14 +74,15 @@ public static class DeviceHelper
         Console.WriteLine("Active playback devices:");
         foreach (var d in devices)
         {
-            Console.WriteLine($"- {d.FriendlyName}");
+            var suffix = showFormats ? FormatMixSuffix(d) : string.Empty;
+            Console.WriteLine($"- {d.FriendlyName}{suffix}");
         }
 
         Console.WriteLine();
         Console.WriteLine("Tip: copy/paste the exact names into router.json");
     }
 
-    public static void PrintCaptureDevices()
+    public static void PrintCaptureDevices(bool showFormats)
     {
         using var enumerator = new MMDeviceEnumerator();
         var devices = enumerator.EnumerateAudioEndPoints(DataFlow.Capture, DeviceState.Active);
@@ -30,11 +90,34 @@ public static class DeviceHelper
         Console.WriteLine("Active capture devices:");
         foreach (var d in devices)
         {
-            Console.WriteLine($"- {d.FriendlyName}");
+            var suffix = showFormats ? FormatMixSuffix(d) : string.Empty;
+            Console.WriteLine($"- {d.FriendlyName}{suffix}");
         }
 
         Console.WriteLine();
         Console.WriteLine("Tip: latency measurement needs a mic/line-in here.");
+    }
+
+    private static string FormatMixSuffix(MMDevice device)
+    {
+        try
+        {
+            var mix = device.AudioClient?.MixFormat;
+            if (mix is null)
+                return "";
+
+            var channels = mix.Channels;
+            var sampleRate = mix.SampleRate;
+
+            // Keep this intentionally concise so --list-devices stays readable.
+            // Highlight common surround layouts so it's easy to spot the virtual endpoints.
+            var highlight = channels is 6 or 8 ? "*" : " ";
+            return $"  {highlight}[mix: {sampleRate} Hz, {channels}ch]";
+        }
+        catch (Exception ex)
+        {
+            return $"  [mix: unavailable: {ex.Message}]";
+        }
     }
 
     public static MMDevice GetRenderDeviceByFriendlyName(string friendlyName)

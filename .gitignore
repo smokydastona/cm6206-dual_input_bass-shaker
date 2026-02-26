@@ -31,12 +31,24 @@ codesign_dev/
 !cm6206_driver_payload/**/*.cat
 !cm6206_driver_payload/**/*.dll
 
+# Virtual audio endpoints driver payload used by the installer (intentionally committed)
+!virtual_audio_driver_payload/
+!virtual_audio_driver_payload/**
+!virtual_audio_driver_payload/**/*.sys
+!virtual_audio_driver_payload/**/*.cat
+!virtual_audio_driver_payload/**/*.dll
+
 # --- .NET build outputs ---
 **/bin/
 **/obj/
 
 # Generated asset exports
 assets/generated/
+
+# --- Virtual audio driver (SysVAD fork workspace; keep source out of git) ---
+virtual_audio_driver/src/
+virtual_audio_driver/package/
+virtual_audio_driver/.tmp/
 
 # Visual Studio / VS Code
 .vs/

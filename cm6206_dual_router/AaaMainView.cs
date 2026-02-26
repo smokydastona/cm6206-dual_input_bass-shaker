@@ -35,8 +35,8 @@ internal sealed class AaaMainView : UserControl
     public readonly Button PresetCustom;
 
     public readonly ComboBox OutputDevice;
-    public readonly ComboBox InputA;
-    public readonly ComboBox InputB;
+    public readonly TextBox InputA;
+    public readonly TextBox InputB;
 
     // Center panel regions
     private readonly RoundedPanel _signalChain;
@@ -164,16 +164,16 @@ internal sealed class AaaMainView : UserControl
         var divider = new Panel { Height = 1, Width = 220, BackColor = Color.FromArgb(60, 255, 255, 255), Margin = new Padding(0, 12, 0, 12) };
         leftLayout.Controls.Add(divider);
 
-        leftLayout.Controls.Add(new Label { Text = "Output device", AutoSize = true, ForeColor = NeonTheme.TextSecondary });
+        leftLayout.Controls.Add(new Label { Text = "Output device (CM6206)", AutoSize = true, ForeColor = NeonTheme.TextSecondary });
         OutputDevice = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 220 };
         leftLayout.Controls.Add(OutputDevice);
 
-        leftLayout.Controls.Add(new Label { Text = "Input A", AutoSize = true, ForeColor = NeonTheme.TextSecondary });
-        InputA = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 220 };
+        leftLayout.Controls.Add(new Label { Text = "Virtual input A name", AutoSize = true, ForeColor = NeonTheme.TextSecondary });
+        InputA = new TextBox { Width = 220, PlaceholderText = "Example: Voicemeeter Input..." };
         leftLayout.Controls.Add(InputA);
 
-        leftLayout.Controls.Add(new Label { Text = "Input B", AutoSize = true, ForeColor = NeonTheme.TextSecondary });
-        InputB = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 220 };
+        leftLayout.Controls.Add(new Label { Text = "Virtual input B name", AutoSize = true, ForeColor = NeonTheme.TextSecondary });
+        InputB = new TextBox { Width = 220, PlaceholderText = "Example: Voicemeeter AUX Input..." };
         leftLayout.Controls.Add(InputB);
 
         _left.Controls.Add(leftLayout);

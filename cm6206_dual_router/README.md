@@ -2,6 +2,10 @@
 
 Pick two Windows playback endpoints (usually two virtual devices), and route them into one physical 7.1 output (CM6206-class USB adapters included).
 
+Note on the long-term architecture:
+- Current releases ingest audio via WASAPI loopback capture of the chosen render endpoints.
+- The planned “for real” approach is a SysVAD/WaveRT virtual audio driver that creates two endpoints and exposes audio to the router via IOCTL/shared memory. See: `docs/virtual_audio_driver/00_plan.md`.
+
 Inputs:
 - **Music** device (full range)
 - **Shaker** device (bass-only)
@@ -54,6 +58,12 @@ cd "cm6206_dual_router"
 dotnet run -c Release -- --list-devices
 ```
 
+Show each device's Windows mix format (helps verify your virtual endpoints are advertising 5.1/7.1 when desired):
+```powershell
+cd "cm6206_dual_router"
+dotnet run -c Release -- --list-devices --show-formats
+```
+
 Edit `router.json` next (device names must match your system).
 
 Then:
@@ -92,7 +102,9 @@ Or run the built exe:
 If you want a normal Windows installer (and an optional CM6206 driver install step), see the repo root README for the Inno Setup installer.
 
 ## Notes / limitations
-- Creating new playback devices *from scratch* requires a signed driver. This app instead uses whatever virtual devices you already have (Voicemeeter/VB-CABLE/etc.) and routes them.
+- Creating new playback devices *from scratch* requires a signed driver.
+- Current releases of this app use whatever virtual devices you already have (Voicemeeter/VB-CABLE/etc.) and routes them.
+- If you want to pursue the “for real” driver approach (two dedicated virtual playback endpoints), see: `docs/virtual_audio_driver/00_plan.md`.
 - If you set Windows default output to the `Music` virtual device, normal apps will go there automatically.
 
 ## Important Windows audio setup (CM6206 gotcha)

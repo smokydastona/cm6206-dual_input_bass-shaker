@@ -1,6 +1,16 @@
 {
-  "musicInputRenderDevice": "Voicemeeter Input (VB-Audio Voicemeeter VAIO)",
-  "shakerInputRenderDevice": "Voicemeeter AUX Input (VB-Audio Voicemeeter AUX VAIO)",
+  // Input ingestion mode:
+  // - WasapiLoopback: current implementation (captures chosen render endpoints via WASAPI loopback)
+  // - CmvadrIoctl: planned driver track (pulls PCM from SysVAD/WaveRT CMVADR via IOCTL, no loopback)
+  "inputIngestMode": "WasapiLoopback",
+
+  // Virtual inputs are render endpoints that other apps play to (Voicemeeter / VB-CABLE / etc.).
+  // Current implementation: set these to the exact Windows playback device names you want to capture via WASAPI loopback.
+  // Planned driver track: these remain the endpoint FriendlyNames, but the router will ingest audio via a driver interface (shared memory / IOCTL).
+  "musicInputRenderDevice": "Virtual Game Audio",
+  "shakerInputRenderDevice": "Virtual Shaker Audio",
+
+  // CM6206-class adapters typically appear as: Speakers (USB Audio Class 1.0 and 2.0 Device Driver)
   "outputRenderDevice": "Speakers (USB Audio Class 1.0 and 2.0 Device Driver)",
   "latencyInputCaptureDevice": null,
 

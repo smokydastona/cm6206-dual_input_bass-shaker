@@ -8,6 +8,10 @@ This file describes the JSON config used by the router app, based on `cm6206_dua
 - `outputRenderDevice` (string): FriendlyName of 7.1 output endpoint (required).
 - `latencyInputCaptureDevice` (string|null): Optional capture device for latency measurement.
 
+Note:
+- Current implementation ingests audio from `musicInputRenderDevice` / `shakerInputRenderDevice` via WASAPI loopback capture.
+- Planned driver track keeps the same friendly-name config fields but changes ingestion to a driver interface (shared memory / IOCTL).
+
 ## Output format
 - `sampleRate` (int): preferred SR (8k..384k).
 - `useExclusiveMode` (bool): attempt WASAPI exclusive.

@@ -1,12 +1,20 @@
 # CM6206 dual-input router (Music + Shaker → one 7.1 output)
 
 This repo contains a Windows app for the common “I want two independent PC outputs, but only one physical 7.1 USB adapter” problem:
+
+Current implementation:
 - Captures **two Windows playback endpoints** (typically two virtual devices) via **WASAPI loopback**:
 	- Music (full-range)
 	- Shaker (bass-only)
 - Mixes/routes them into **one physical 7.1 output** (e.g. CM6206).
 
+Planned implementation (virtual driver track):
+- Provide two dedicated virtual playback devices via a SysVAD/WaveRT kernel driver (`Virtual Game Audio` / `Virtual Shaker Audio`).
+- The router ingests audio via a driver interface (shared memory / IOCTL) instead of loopback capture.
+
 It’s designed to avoid driver/registry hacks and to not fight Windows default-device behavior. You choose your endpoints and the app routes audio.
+
+Note: creating *new* playback devices requires a signed driver. Current releases assume you already have virtual endpoints (Voicemeeter/VB-CABLE/etc.). There’s a SysVAD-based driver plan here: `docs/virtual_audio_driver/00_plan.md`.
 
 ## What’s included
 - WinForms UI with tabs for **Devices**, **DSP**, **Channels**, **Calibration**.
@@ -31,7 +39,7 @@ If you want Minecraft-specific haptics (telemetry → tactile audio), use the Fo
 
 Common setup:
 - Mod outputs haptics to a virtual device (e.g. VB-CABLE)
-- This router loopback-captures that device as the “Shaker input” and routes to your CM6206 7.1 output
+- Current implementation: this router loopback-captures that device as the “Shaker input” and routes to your CM6206 7.1 output
 
 ## Prebuilt EXE (GitHub Actions)
 - This repo publishes a self-contained `win-x64` single-file build.
@@ -50,6 +58,9 @@ If you want a normal Windows installer (Start menu shortcut, optional desktop ic
 	- Requires admin (UAC prompt).
 	- The driver step is **best-effort**: `pnputil` may return non-zero for "already installed" and similar cases; setup continues.
 	- Driver install can fail if Windows refuses the driver (signature policy / Secure Boot / incompatible OS).
+
+- Optional task (advanced): **Install Virtual Game/Shaker playback endpoints** (SysVAD/WaveRT fork).
+	- This option is only shown when `virtual_audio_driver_payload/WIN10/Driver/CMVADR.inf` is present at installer build time.
 
 Driver files source:
 - CI builds use the minimal, installer-focused payload in `cm6206_driver_payload/`.

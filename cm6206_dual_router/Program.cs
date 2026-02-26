@@ -97,23 +97,58 @@ internal static class Program
             name: "--list-devices",
             description: "List available playback devices and exit");
 
+        var showFormatsOption = new Option<bool>(
+            name: "--show-formats",
+            description: "With --list-devices, also show each endpoint's Windows mix format (sample rate/channels)");
+
         var uiOption = new Option<bool>(
             name: "--ui",
             description: "Launch the UI");
 
+        var probeCmvadrOption = new Option<bool>(
+            name: "--probe-cmvadr",
+            description: "Probe the CMVADR virtual driver endpoints (\\\\.\\CMVADR_Game / \\\\.\\CMVADR_Shaker) and print formats");
+
         var root = new RootCommand("CM6206 Dual Virtual Router (2 virtual outputs -> 1 CM6206 7.1)");
         root.AddOption(configOption);
         root.AddOption(listDevicesOption);
+        root.AddOption(showFormatsOption);
         root.AddOption(uiOption);
+        root.AddOption(probeCmvadrOption);
 
-        root.SetHandler((configPath, listDevices, ui) =>
+        root.SetHandler((configPath, listDevices, showFormats, ui, probeCmvadr) =>
         {
             AppLog.Info($"Command handler invoked: ui={ui}, listDevices={listDevices}, configPath={configPath}");
             if (listDevices)
             {
-                DeviceHelper.PrintRenderDevices();
+                DeviceHelper.PrintRenderDevices(showFormats);
                 Console.WriteLine();
-                DeviceHelper.PrintCaptureDevices();
+                DeviceHelper.PrintCaptureDevices(showFormats);
+                return;
+            }
+
+            if (probeCmvadr)
+            {
+                try
+                {
+                    var game = CmvadrIoctlInput.ProbeFormat(VirtualAudioDriverIoctl.GameDeviceWin32Path);
+                    Console.WriteLine($"CMVADR_Game:   {game.SampleRate} Hz, {game.BitsPerSample}-bit, {game.Channels} ch");
+
+                    try
+                    {
+                        var shaker = CmvadrIoctlInput.ProbeFormat(VirtualAudioDriverIoctl.ShakerDeviceWin32Path);
+                        Console.WriteLine($"CMVADR_Shaker: {shaker.SampleRate} Hz, {shaker.BitsPerSample}-bit, {shaker.Channels} ch");
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"CMVADR_Shaker: (not available) {ex.Message}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"CMVADR probe failed: {ex.Message}");
+                }
+
                 return;
             }
 
@@ -179,7 +214,7 @@ internal static class Program
 
             router.WaitUntilStopped();
         },
-        configOption, listDevicesOption, uiOption);
+        configOption, listDevicesOption, showFormatsOption, uiOption, probeCmvadrOption);
 
         try
         {

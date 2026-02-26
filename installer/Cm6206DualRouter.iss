@@ -10,11 +10,32 @@
 ; NOTE: This .iss lives under installer/, so all repo-root paths must be prefixed with ..\\
 #define PublishDir "..\\artifacts\\cm6206_dual_router_win-x64"
 #define DriverDir "..\\cm6206_driver_payload\\WIN10\\Driver"
+#define VirtualDriverDir "..\\virtual_audio_driver_payload\\WIN10\\Driver"
 
-#if DirExists(DriverDir)
+; Presence checks (avoid offering install tasks when only README is present)
+#define DriverInf DriverDir + "\\CMUAC.inf"
+#define VirtualDriverInf VirtualDriverDir + "\\CMVADR.inf"
+
+#if DirExists(DriverDir) && FileExists(DriverInf)
   #define IncludeDriverPayload 1
 #else
   #define IncludeDriverPayload 0
+#endif
+
+#if DirExists(VirtualDriverDir) && FileExists(VirtualDriverInf)
+  #define IncludeVirtualDriverPayload 1
+#else
+  #define IncludeVirtualDriverPayload 0
+#endif
+
+#if IncludeDriverPayload
+  #define IncludeAnyDriverPayload 1
+#else
+  #if IncludeVirtualDriverPayload
+    #define IncludeAnyDriverPayload 1
+  #else
+    #define IncludeAnyDriverPayload 0
+  #endif
 #endif
 
 [Setup]
@@ -41,6 +62,9 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 #if IncludeDriverPayload
 Name: "install_driver"; Description: "Install CM6206 USB 7.1 driver (recommended)"; Flags: checkedonce
 #endif
+#if IncludeVirtualDriverPayload
+Name: "install_virtual_driver"; Description: "Install Virtual Game/Shaker playback endpoints (advanced)"; Flags: unchecked
+#endif
 Name: "desktop_icon"; Description: "Create a desktop icon"; Flags: unchecked
 
 [Files]
@@ -50,6 +74,11 @@ Source: "{#PublishDir}\\*"; DestDir: "{app}"; Flags: recursesubdirs createallsub
 ; Driver payload (minimal subset needed for pnputil)
 #if IncludeDriverPayload
 Source: "{#DriverDir}\\*"; DestDir: "{tmp}\\cm6206_driver"; Flags: recursesubdirs createallsubdirs deleteafterinstall; Tasks: install_driver
+#endif
+
+; Virtual audio endpoints driver payload (minimal subset needed for pnputil)
+#if IncludeVirtualDriverPayload
+Source: "{#VirtualDriverDir}\\*"; DestDir: "{tmp}\\cm6206_virtual_audio_driver"; Flags: recursesubdirs createallsubdirs deleteafterinstall; Tasks: install_virtual_driver
 #endif
 
 [Run]
@@ -88,10 +117,50 @@ begin
   else
     Log('pnputil failed to start (ignored)');
 end;
+#endif
 
+#if IncludeVirtualDriverPayload
+procedure TryInstallVirtualAudioDriverWithPnPUtil();
+var
+  InfPath: string;
+  ResultCode: Integer;
+  Ok: Boolean;
+begin
+  if not WizardIsTaskSelected('install_virtual_driver') then
+    exit;
+
+  // Expected to be provided by the driver build pipeline.
+  InfPath := ExpandConstant('{tmp}\\cm6206_virtual_audio_driver\\CMVADR.inf');
+  if not FileExists(InfPath) then
+  begin
+    Log('Virtual audio driver INF not found: ' + InfPath);
+    exit;
+  end;
+
+  Log('Installing virtual Game/Shaker endpoints driver via pnputil: ' + InfPath);
+  Ok := Exec(ExpandConstant('{sys}\\pnputil.exe'),
+    '/add-driver "' + InfPath + '" /install',
+    '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+
+  if Ok then
+    Log(Format('pnputil exit code: %d (ignored)', [ResultCode]))
+  else
+    Log('pnputil failed to start (ignored)');
+end;
+#endif
+
+#if IncludeAnyDriverPayload
 procedure CurStepChanged(CurStep: TSetupStep);
 begin
-  if CurStep = ssPostInstall then
-    TryInstallDriverWithPnPUtil();
+  if CurStep <> ssPostInstall then
+    exit;
+
+  #if IncludeDriverPayload
+  TryInstallDriverWithPnPUtil();
+  #endif
+
+  #if IncludeVirtualDriverPayload
+  TryInstallVirtualAudioDriverWithPnPUtil();
+  #endif
 end;
 #endif

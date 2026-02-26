@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using NAudio.CoreAudioApi;
@@ -19,6 +20,12 @@ internal sealed class AaaMainForm : Form
 
     private RouterConfig? _config;
     private WasapiDualRouter? _router;
+
+    private static readonly JsonSerializerOptions ConfigJsonOptions = new()
+    {
+        WriteIndented = true,
+        PropertyNamingPolicy = null
+    };
 
     public AaaMainForm(string configPath)
     {
@@ -78,8 +85,8 @@ internal sealed class AaaMainForm : Form
             _view!.BuildInfo.Text = $"Build: {typeof(Program).Assembly.GetName().Version}";
             _view.OpenLogFolder.Click += (_, _) => OpenLogFolder();
             _view.OutputDevice.SelectionChangeCommitted += (_, _) => RestartRouterFromUi();
-            _view.InputA.SelectionChangeCommitted += (_, _) => RestartRouterFromUi();
-            _view.InputB.SelectionChangeCommitted += (_, _) => RestartRouterFromUi();
+            _view.InputA.Leave += (_, _) => RestartRouterFromUi();
+            _view.InputB.Leave += (_, _) => RestartRouterFromUi();
             _view.PresetGaming.Click += (_, _) => ApplyPreset("Gaming");
             _view.PresetMovies.Click += (_, _) => ApplyPreset("Movies");
             _view.PresetMusic.Click += (_, _) => ApplyPreset("Music");
@@ -98,8 +105,20 @@ internal sealed class AaaMainForm : Form
 
             // Best-effort: pick config values if present.
             SelectIfPresent(_view.OutputDevice, _config.OutputRenderDevice);
-            SelectIfPresent(_view.InputA, _config.MusicInputRenderDevice);
-            SelectIfPresent(_view.InputB, _config.ShakerInputRenderDevice);
+            _view.InputA.Text = string.IsNullOrWhiteSpace(_config.MusicInputRenderDevice)
+                ? VirtualInputNames.DefaultInputA
+                : _config.MusicInputRenderDevice;
+            _view.InputB.Text = string.IsNullOrWhiteSpace(_config.ShakerInputRenderDevice)
+                ? VirtualInputNames.DefaultInputB
+                : _config.ShakerInputRenderDevice;
+
+            // CM6206-focused default: if output isn't set, pick a likely 7.1 USB output.
+            if (_view.OutputDevice.SelectedIndex < 0)
+            {
+                var likely = DeviceHelper.TryFindLikelyCm6206OutputRenderDeviceFriendlyName();
+                if (!string.IsNullOrWhiteSpace(likely))
+                    SelectIfPresent(_view.OutputDevice, likely);
+            }
 
             RestartRouterFromUi();
             AppLog.Info("AAA UI OnShownAsync: end");
@@ -171,7 +190,7 @@ internal sealed class AaaMainForm : Form
             using var enumerator = new MMDeviceEnumerator();
             var render = enumerator.EnumerateAudioEndPoints(DataFlow.Render, DeviceState.Active);
 
-            // Inputs A/B are render endpoints captured via WASAPI loopback, so list render endpoints for all three.
+            // Output is a render endpoint.
             var names = render
                 .Select(d => d.FriendlyName)
                 .Append(DeviceHelper.DefaultSystemRenderDevice)
@@ -191,12 +210,7 @@ internal sealed class AaaMainForm : Form
         if (_view is not null)
         {
             _view.OutputDevice.Items.Clear();
-            _view.InputA.Items.Clear();
-            _view.InputB.Items.Clear();
-
             _view.OutputDevice.Items.AddRange(renderNames);
-            _view.InputA.Items.AddRange(renderNames);
-            _view.InputB.Items.AddRange(renderNames);
 
             _view.StatusText.Text = "Status: Devices loaded.";
         }
@@ -212,26 +226,41 @@ internal sealed class AaaMainForm : Form
         try
         {
             var output = view.OutputDevice.SelectedItem as string;
-            var inputA = view.InputA.SelectedItem as string;
-            var inputB = view.InputB.SelectedItem as string;
+            var inputA = (view.InputA.Text ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(inputA))
+            {
+                inputA = VirtualInputNames.DefaultInputA;
+                view.InputA.Text = inputA;
+            }
 
-            if (string.IsNullOrWhiteSpace(output) || string.IsNullOrWhiteSpace(inputA) || string.IsNullOrWhiteSpace(inputB))
+            var inputB = (view.InputB.Text ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(inputB))
+            {
+                inputB = VirtualInputNames.DefaultInputB;
+                view.InputB.Text = inputB;
+            }
+
+            if (string.IsNullOrWhiteSpace(output) || string.IsNullOrWhiteSpace(inputA))
             {
                 view.DevicePill.State = PillState.Warning;
                 view.DevicePill.Text = "Device: Not configured";
-                view.StatusText.Text = "Status: Select Output/Input A/Input B";
+                view.StatusText.Text = "Status: Set Output + Virtual input A";
                 StopRouter();
                 return;
             }
 
             config.OutputRenderDevice = output;
             config.MusicInputRenderDevice = inputA;
-            config.ShakerInputRenderDevice = inputB;
+            config.ShakerInputRenderDevice = string.Equals(inputB, DeviceHelper.NoneDevice, StringComparison.OrdinalIgnoreCase)
+                ? string.Empty
+                : inputB;
             config.Validate(requireDevices: false);
 
             StopRouter();
             _router = new WasapiDualRouter(config);
             _router.Start();
+
+            TryPersistConfig(config);
 
             view.DevicePill.State = PillState.Ok;
             view.DevicePill.Text = "Device: Connected";
@@ -244,6 +273,57 @@ internal sealed class AaaMainForm : Form
             view.DevicePill.Text = "Device: Error";
             view.StatusText.Text = $"Status: {ex.Message}";
             StopRouter();
+        }
+    }
+
+    private void TryPersistConfig(RouterConfig config)
+    {
+        // Best-effort: keep the user's chosen virtual endpoint names.
+        // If the app is installed under Program Files, _configPath may not be writable.
+        if (TryWriteConfig(_configPath, config, out _))
+            return;
+
+        try
+        {
+            var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+            var dir = Path.Combine(appData, "Cm6206DualRouter");
+            Directory.CreateDirectory(dir);
+            var fallback = Path.Combine(dir, "router.json");
+
+            if (TryWriteConfig(fallback, config, out var err2))
+            {
+                _view!.StatusText.Text = $"Status: Running (saved config to {fallback})";
+                return;
+            }
+
+            AppLog.Warn($"Failed to save config to AppData: {err2}");
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn($"Failed to save config: {ex.Message}");
+        }
+    }
+
+    private static bool TryWriteConfig(string path, RouterConfig config, out string? error)
+    {
+        error = null;
+        try
+        {
+            var json = JsonSerializer.Serialize(config, ConfigJsonOptions);
+            var dir = Path.GetDirectoryName(path);
+            if (!string.IsNullOrWhiteSpace(dir))
+                Directory.CreateDirectory(dir);
+
+            var tmp = path + ".tmp";
+            File.WriteAllText(tmp, json);
+            File.Copy(tmp, path, overwrite: true);
+            File.Delete(tmp);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+            return false;
         }
     }
 

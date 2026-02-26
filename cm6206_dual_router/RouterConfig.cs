@@ -5,6 +5,12 @@ namespace Cm6206DualRouter;
 
 public sealed class RouterConfig
 {
+    // Input ingestion mode:
+    // - WasapiLoopback (current): capture from render endpoints via WASAPI loopback
+    // - CmvadrIoctl (planned): pull PCM from the SysVAD/WaveRT virtual driver via IOCTL (no loopback)
+    [JsonPropertyName("inputIngestMode")]
+    public string InputIngestMode { get; set; } = "WasapiLoopback";
+
     [JsonPropertyName("musicInputRenderDevice")]
     public string MusicInputRenderDevice { get; set; } = string.Empty;
 
@@ -147,6 +153,10 @@ public sealed class RouterConfig
 
     public void Validate(bool requireDevices = true)
     {
+        var ingest = (InputIngestMode ?? "WasapiLoopback").Trim();
+        if (ingest is not ("WasapiLoopback" or "CmvadrIoctl"))
+            throw new InvalidOperationException("inputIngestMode must be one of: WasapiLoopback, CmvadrIoctl");
+
         if (requireDevices)
         {
             if (string.IsNullOrWhiteSpace(MusicInputRenderDevice))

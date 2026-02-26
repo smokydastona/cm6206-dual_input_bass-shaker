@@ -256,8 +256,8 @@ public sealed class RouterMainForm : Form
 
         AppLog.Info("RouterMainForm ctor: init simple mode controls...");
         AppLog.Info("RouterMainForm ctor: simple mode combos...");
-        _simpleGameSourceCombo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 520 };
-        _simpleSecondarySourceCombo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 520 };
+        _simpleGameSourceCombo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDown, Width = 520 };
+        _simpleSecondarySourceCombo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDown, Width = 520 };
         _simpleOutputCombo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 520 };
         _simplePresetCombo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 300 };
         AppLog.Info("RouterMainForm ctor: simple mode combos ok");
@@ -269,7 +269,7 @@ public sealed class RouterMainForm : Form
         _simpleStatus = new Label { Text = "", AutoSize = true };
         _simpleNextHint = new Label
         {
-            Text = "New here?  1) Select devices   2) Pick a preset   3) Press Start",
+            Text = "New here?  1) Name inputs   2) Pick output   3) Pick a preset   4) Press Start",
             AutoSize = true,
             ForeColor = NeonTheme.TextMuted
         };
@@ -308,8 +308,8 @@ public sealed class RouterMainForm : Form
 
         _metersTimer = new System.Windows.Forms.Timer();
 
-        _musicDeviceCombo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList };
-        _shakerDeviceCombo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList };
+        _musicDeviceCombo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDown };
+        _shakerDeviceCombo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDown };
         _outputDeviceCombo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList };
 
         _latencyInputCombo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList };
@@ -682,8 +682,8 @@ public sealed class RouterMainForm : Form
     {
         var activeTab = _tabs.SelectedTab?.Text ?? "(unknown)";
         var running = _router is not null;
-        var gameSource = _simpleGameSourceCombo.SelectedItem as string;
-        var secondarySource = _simpleSecondarySourceCombo.SelectedItem as string;
+        var gameSource = _simpleGameSourceCombo.Text;
+        var secondarySource = _simpleSecondarySourceCombo.Text;
         var output = _simpleOutputCombo.SelectedItem as string;
 
         var outDev = _outputDeviceCombo.SelectedItem as string;
@@ -776,16 +776,16 @@ public sealed class RouterMainForm : Form
             case "set_game_source":
                 if (!string.IsNullOrWhiteSpace(a.StringValue))
                 {
-                    _simpleGameSourceCombo.SelectedItem = a.StringValue;
-                    _musicDeviceCombo.SelectedItem = a.StringValue;
+                    _simpleGameSourceCombo.Text = a.StringValue;
+                    _musicDeviceCombo.Text = a.StringValue;
                 }
                 break;
 
             case "set_secondary_source":
                 if (!string.IsNullOrWhiteSpace(a.StringValue))
                 {
-                    _simpleSecondarySourceCombo.SelectedItem = a.StringValue;
-                    _shakerDeviceCombo.SelectedItem = a.StringValue;
+                    _simpleSecondarySourceCombo.Text = a.StringValue;
+                    _shakerDeviceCombo.Text = a.StringValue;
                 }
                 break;
 
@@ -1068,7 +1068,7 @@ public sealed class RouterMainForm : Form
         help.Click += (_, _) =>
         {
             MessageBox.Show(this,
-                "What do I do next?\n\n1) Select your Game Audio Source\n2) Select Output Device (CM6206 7.1)\n3) Pick a preset\n4) Press Start Routing\n\nIf you hear no shaker: increase Bass Shaker strength.",
+                "What do I do next?\n\n1) Enter your Virtual input A/B device names\n2) Select Output Device (CM6206 7.1)\n3) Pick a preset\n4) Press Start Routing\n\nTip: create/install your virtual playback endpoints first, then set other apps to output to them.",
                 "Quick Start",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Information);
@@ -1083,13 +1083,13 @@ public sealed class RouterMainForm : Form
         devicesLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 210));
         devicesLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
 
-        devicesLayout.Controls.Add(new Label { Text = "Game audio source", AutoSize = true, ForeColor = NeonTheme.TextPrimary }, 0, 0);
+        devicesLayout.Controls.Add(new Label { Text = "Virtual input A name", AutoSize = true, ForeColor = NeonTheme.TextPrimary }, 0, 0);
         devicesLayout.Controls.Add(_simpleGameSourceCombo, 1, 0);
-        devicesLayout.Controls.Add(new Label { Text = "Capture system audio", AutoSize = true, ForeColor = NeonTheme.TextMuted, Font = NeonTheme.CreateMonoFont(10) }, 1, 1);
+        devicesLayout.Controls.Add(new Label { Text = "Exact Windows playback device name", AutoSize = true, ForeColor = NeonTheme.TextMuted, Font = NeonTheme.CreateMonoFont(10) }, 1, 1);
 
-        devicesLayout.Controls.Add(new Label { Text = "Music / secondary source", AutoSize = true, ForeColor = NeonTheme.TextPrimary }, 0, 2);
+        devicesLayout.Controls.Add(new Label { Text = "Virtual input B name", AutoSize = true, ForeColor = NeonTheme.TextPrimary }, 0, 2);
         devicesLayout.Controls.Add(_simpleSecondarySourceCombo, 1, 2);
-        devicesLayout.Controls.Add(new Label { Text = "Optional second source", AutoSize = true, ForeColor = NeonTheme.TextMuted, Font = NeonTheme.CreateMonoFont(10) }, 1, 3);
+        devicesLayout.Controls.Add(new Label { Text = "Type (None) to disable input B", AutoSize = true, ForeColor = NeonTheme.TextMuted, Font = NeonTheme.CreateMonoFont(10) }, 1, 3);
 
         devicesLayout.Controls.Add(new Label { Text = "Output device", AutoSize = true, ForeColor = NeonTheme.TextPrimary }, 0, 4);
         devicesLayout.Controls.Add(_simpleOutputCombo, 1, 4);
@@ -1098,8 +1098,8 @@ public sealed class RouterMainForm : Form
         devicesPanel.Controls.Add(devicesLayout);
         root.Controls.Add(devicesPanel, 0, 2);
 
-        _toolTip.SetToolTip(_simpleGameSourceCombo, "Choose where your game audio plays (we capture that audio).");
-        _toolTip.SetToolTip(_simpleSecondarySourceCombo, "Optional: a second source (music player, browser, etc).");
+        _toolTip.SetToolTip(_simpleGameSourceCombo, "Enter the exact Windows playback device name for Virtual input A.");
+        _toolTip.SetToolTip(_simpleSecondarySourceCombo, "Enter the exact Windows playback device name for Virtual input B (or (None)).");
         _toolTip.SetToolTip(_simpleOutputCombo, "Choose where the mixed audio will play (usually CM6206 7.1).");
 
         var presetPanel = new NeonPanel { Dock = DockStyle.Top, NoiseOverlay = true, Padding = new Padding(14), AutoSize = true };
@@ -1186,25 +1186,48 @@ public sealed class RouterMainForm : Form
         hintPanel.Controls.Add(_simpleNextHint);
         root.Controls.Add(hintPanel, 0, 6);
 
-        // Wire simple dropdowns to advanced dropdowns + update status.
-        _simpleGameSourceCombo.SelectedIndexChanged += (_, _) =>
+        // Wire simple inputs to advanced inputs + update status.
+        _simpleGameSourceCombo.TextChanged += (_, _) =>
         {
             if (_suppressConsoleSync) return;
             _suppressConsoleSync = true;
             try
             {
-                _musicDeviceCombo.SelectedItem = _simpleGameSourceCombo.SelectedItem;
+                _musicDeviceCombo.Text = _simpleGameSourceCombo.Text;
             }
             finally { _suppressConsoleSync = false; }
             UpdateStatusBar();
         };
-        _simpleSecondarySourceCombo.SelectedIndexChanged += (_, _) =>
+        _musicDeviceCombo.TextChanged += (_, _) =>
         {
             if (_suppressConsoleSync) return;
             _suppressConsoleSync = true;
             try
             {
-                _shakerDeviceCombo.SelectedItem = _simpleSecondarySourceCombo.SelectedItem;
+                _simpleGameSourceCombo.Text = _musicDeviceCombo.Text;
+            }
+            finally { _suppressConsoleSync = false; }
+            UpdateStatusBar();
+        };
+
+        _simpleSecondarySourceCombo.TextChanged += (_, _) =>
+        {
+            if (_suppressConsoleSync) return;
+            _suppressConsoleSync = true;
+            try
+            {
+                _shakerDeviceCombo.Text = _simpleSecondarySourceCombo.Text;
+            }
+            finally { _suppressConsoleSync = false; }
+            UpdateStatusBar();
+        };
+        _shakerDeviceCombo.TextChanged += (_, _) =>
+        {
+            if (_suppressConsoleSync) return;
+            _suppressConsoleSync = true;
+            try
+            {
+                _simpleSecondarySourceCombo.Text = _shakerDeviceCombo.Text;
             }
             finally { _suppressConsoleSync = false; }
             UpdateStatusBar();
@@ -1723,10 +1746,10 @@ public sealed class RouterMainForm : Form
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 180));
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
 
-        layout.Controls.Add(new Label { Text = "Game audio source", AutoSize = true }, 0, 0);
+        layout.Controls.Add(new Label { Text = "Virtual input A name", AutoSize = true }, 0, 0);
         layout.Controls.Add(_musicDeviceCombo, 1, 0);
 
-        layout.Controls.Add(new Label { Text = "Music / secondary source", AutoSize = true }, 0, 1);
+        layout.Controls.Add(new Label { Text = "Virtual input B name", AutoSize = true }, 0, 1);
         layout.Controls.Add(_shakerDeviceCombo, 1, 1);
 
         layout.Controls.Add(new Label { Text = "Output device", AutoSize = true }, 0, 2);
@@ -1952,8 +1975,8 @@ public sealed class RouterMainForm : Form
 
         sb.AppendLine();
         sb.AppendLine("Selected devices:");
-        sb.AppendLine(DescribeRenderDevice(_musicDeviceCombo.SelectedItem as string, "Music input (loopback)"));
-        sb.AppendLine(DescribeRenderDevice(_shakerDeviceCombo.SelectedItem as string, "Shaker input (loopback)"));
+        sb.AppendLine(DescribeRenderDevice(_musicDeviceCombo.Text, "Virtual input A (loopback)"));
+        sb.AppendLine(DescribeRenderDevice(_shakerDeviceCombo.Text, "Virtual input B (loopback)"));
         sb.AppendLine(DescribeRenderDevice(_outputDeviceCombo.SelectedItem as string, "Output"));
         sb.AppendLine(DescribeCaptureDevice(_latencyInputCombo.SelectedItem as string, "Latency input (capture)"));
 
@@ -3215,13 +3238,11 @@ public sealed class RouterMainForm : Form
                     combo.SelectedItem = selected;
             }
 
-            SetItems(_musicDeviceCombo, allowNone: false);
-            SetItems(_shakerDeviceCombo, allowNone: true);
             SetItems(_outputDeviceCombo, allowNone: false);
 
-            // Simple Mode dropdowns
-            SetItems(_simpleGameSourceCombo, allowNone: false);
-            SetItems(_simpleSecondarySourceCombo, allowNone: true);
+            // Inputs are virtual endpoint names; don't enumerate arbitrary render devices.
+            EnsureNoneOption(_shakerDeviceCombo);
+            EnsureNoneOption(_simpleSecondarySourceCombo);
             SetItems(_simpleOutputCombo, allowNone: false);
 
             _assistant.UpdateOutputDevices(devices.ToArray());
@@ -3246,18 +3267,31 @@ public sealed class RouterMainForm : Form
         _suppressFormatUpdate = true;
         try
         {
-            SelectIfPresent(_musicDeviceCombo, _config.MusicInputRenderDevice);
-            SelectIfPresent(_shakerDeviceCombo, _config.ShakerInputRenderDevice);
+            // Virtual inputs: typed names (not enumerated)
+            _musicDeviceCombo.Text = string.IsNullOrWhiteSpace(_config.MusicInputRenderDevice)
+                ? VirtualInputNames.DefaultInputA
+                : _config.MusicInputRenderDevice;
+            _simpleGameSourceCombo.Text = _musicDeviceCombo.Text;
+
+            _shakerDeviceCombo.Text = string.IsNullOrWhiteSpace(_config.ShakerInputRenderDevice)
+                ? VirtualInputNames.DefaultInputB
+                : _config.ShakerInputRenderDevice;
+            _simpleSecondarySourceCombo.Text = _shakerDeviceCombo.Text;
+            EnsureNoneOption(_shakerDeviceCombo);
+            EnsureNoneOption(_simpleSecondarySourceCombo);
+
+            // Output device: enumerated
+            if (string.IsNullOrWhiteSpace(_config.OutputRenderDevice))
+            {
+                var likely = DeviceHelper.TryFindLikelyCm6206OutputRenderDeviceFriendlyName();
+                if (!string.IsNullOrWhiteSpace(likely))
+                {
+                    SelectIfPresent(_outputDeviceCombo, likely);
+                    SelectIfPresent(_simpleOutputCombo, likely);
+                }
+            }
+
             SelectIfPresent(_outputDeviceCombo, _config.OutputRenderDevice);
-
-            SelectIfPresent(_simpleGameSourceCombo, _config.MusicInputRenderDevice);
-
-            // Secondary source may be empty; if so, leave at (None) if present.
-            if (string.IsNullOrWhiteSpace(_config.ShakerInputRenderDevice))
-                _simpleSecondarySourceCombo.SelectedItem = DeviceHelper.NoneDevice;
-            else
-                SelectIfPresent(_simpleSecondarySourceCombo, _config.ShakerInputRenderDevice);
-
             SelectIfPresent(_simpleOutputCombo, _config.OutputRenderDevice);
             if (!string.IsNullOrWhiteSpace(_config.LatencyInputCaptureDevice))
                 SelectIfPresent(_latencyInputCombo, _config.LatencyInputCaptureDevice);
@@ -3266,6 +3300,13 @@ public sealed class RouterMainForm : Form
         {
             _suppressFormatUpdate = false;
         }
+    }
+
+    private static void EnsureNoneOption(ComboBox combo)
+    {
+        if (combo.Items.Contains(DeviceHelper.NoneDevice))
+            return;
+        combo.Items.Insert(0, DeviceHelper.NoneDevice);
     }
 
     private void LoadConfigIntoControls()
@@ -3420,13 +3461,16 @@ public sealed class RouterMainForm : Form
 
     private void SaveConfigFromControls(bool showSavedDialog = true)
     {
-        _config.MusicInputRenderDevice = _musicDeviceCombo.SelectedItem as string ?? _config.MusicInputRenderDevice;
-        {
-            var secondary = _shakerDeviceCombo.SelectedItem as string;
-            _config.ShakerInputRenderDevice = string.Equals(secondary, DeviceHelper.NoneDevice, StringComparison.OrdinalIgnoreCase)
-                ? string.Empty
-                : (secondary ?? _config.ShakerInputRenderDevice);
-        }
+        var inputA = (_musicDeviceCombo.Text ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(inputA))
+            inputA = VirtualInputNames.DefaultInputA;
+        _config.MusicInputRenderDevice = inputA;
+
+        var inputB = (_shakerDeviceCombo.Text ?? string.Empty).Trim();
+        _config.ShakerInputRenderDevice = string.Equals(inputB, DeviceHelper.NoneDevice, StringComparison.OrdinalIgnoreCase) ||
+                                           string.IsNullOrWhiteSpace(inputB)
+            ? string.Empty
+            : inputB;
         _config.OutputRenderDevice = _outputDeviceCombo.SelectedItem as string ?? _config.OutputRenderDevice;
         _config.LatencyInputCaptureDevice = _latencyInputCombo.SelectedItem as string ?? _config.LatencyInputCaptureDevice;
 

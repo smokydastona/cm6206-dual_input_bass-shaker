@@ -3,7 +3,9 @@
 This repo is a **.NET 8 Windows audio app** that uses **NAudio + WASAPI**.
 
 ## Repo layout (source of truth)
-- `cm6206_dual_router/`: WinForms router that captures **two render endpoints** (WASAPI loopback) and outputs **one 7.1 render endpoint**.
+- `cm6206_dual_router/`: WinForms router that outputs **one 7.1 render endpoint**.
+  - Current ingestion: captures **two render endpoints** via WASAPI loopback.
+  - Planned ingestion: pulls PCM from a SysVAD/WaveRT virtual driver via IOCTL/shared memory.
 - `cm6206_extracted/`: vendor driver bundle reference — treat as a **static artifact** (avoid editing unless you’re intentionally updating vendor files).
 - `cm6206_driver_payload/`: minimal WIN10 driver payload committed for the installer/CI (INF/CAT + x86/x64 binaries).
 
@@ -16,7 +18,8 @@ This repo is a **.NET 8 Windows audio app** that uses **NAudio + WASAPI**.
 
 ## CM6206 Dual Router: core data flow + conventions
 - Entry: `cm6206_dual_router/Program.cs` → `WasapiDualRouter` (headless) or `RouterMainForm` (UI).
-- Pipeline: `WasapiLoopbackCapture` (music + shaker) → `BufferedWaveProvider` → `RouterSampleProvider` → `WasapiOut`.
+- Pipeline (current): `WasapiLoopbackCapture` (music + shaker) → `BufferedWaveProvider` → `RouterSampleProvider` → `WasapiOut`.
+- Pipeline (planned driver track): driver IOCTL/shared memory ingest → `BufferedWaveProvider` → `RouterSampleProvider` → `WasapiOut`.
 - Output is **7.1 float** with channel order: `FL, FR, FC, LFE, BL, BR, SL, SR` (see `RouterSampleProvider`).
 - Config is JSON (`router.json`) parsed with `System.Text.Json` (case-insensitive, trailing commas allowed). Arrays like `channelGainsDb`, `outputChannelMap`, `channelMute/Invert/Solo` must be **length 8** (validated in `RouterConfig.Validate()`).
 - Shared vs Exclusive:

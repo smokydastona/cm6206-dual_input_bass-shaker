@@ -19,8 +19,12 @@ This is a vocabulary map for answering “what am I looking at?” and “what d
 (Exact tab names can vary slightly; treat `CopilotContext.ActiveTab` as authoritative for “what screen is the user on”.)
 
 ## Device terms
-- **Game Source**: the primary render endpoint being captured by WASAPI loopback.
+- **Game Source**: the primary render endpoint.
+  - Current implementation: captured by WASAPI loopback.
+  - Planned driver track: audio is pulled from the virtual driver endpoint via IOCTL.
 - **Secondary Source**: optional second render endpoint (can be “(None)” / disabled).
+  - Current implementation: captured by WASAPI loopback.
+  - Planned driver track: audio is pulled from the virtual driver endpoint via IOCTL.
 - **Output device**: the 7.1 render endpoint receiving the final mixed stream.
 
 Important:
