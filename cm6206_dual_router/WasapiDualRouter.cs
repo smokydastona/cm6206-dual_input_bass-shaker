@@ -2,6 +2,7 @@ using System.Threading;
 using NAudio.CoreAudioApi;
 using NAudio.Wave;
 using NAudio.Wave.SampleProviders;
+using Cm6206DualRouter.Telemetry;
 
 namespace Cm6206DualRouter;
 
@@ -25,6 +26,9 @@ public sealed class WasapiDualRouter : IDisposable
     private readonly BufferedWaveProvider _musicBuffer;
     private readonly BufferedWaveProvider? _shakerBuffer;
 
+    private readonly BstTelemetryHapticsSampleProvider? _telemetryShaker;
+    private readonly AutoFallbackShakerSampleProvider? _autoFallbackShaker;
+
     private readonly WasapiOut _output;
     private readonly ManualResetEventSlim _stopped = new(false);
 
@@ -41,18 +45,21 @@ public sealed class WasapiDualRouter : IDisposable
     {
         _config = config;
 
+        var useTelemetryHaptics = _config.TelemetryHapticsEnabled;
+        var useShakerInputDevice = !string.IsNullOrWhiteSpace(config.ShakerInputRenderDevice);
+
         var ingest = (_config.InputIngestMode ?? "WasapiLoopback").Trim();
 
         if (ingest == "WasapiLoopback")
         {
             _musicDevice = DeviceHelper.GetRenderDeviceByFriendlyName(config.MusicInputRenderDevice);
-            if (!string.IsNullOrWhiteSpace(config.ShakerInputRenderDevice))
+            if (useShakerInputDevice)
                 _shakerDevice = DeviceHelper.GetRenderDeviceByFriendlyName(config.ShakerInputRenderDevice);
         }
         else
         {
             _musicIoctl = CmvadrIoctlInput.Open(VirtualAudioDriverIoctl.GameDeviceWin32Path);
-            if (!string.IsNullOrWhiteSpace(config.ShakerInputRenderDevice))
+            if (useShakerInputDevice)
                 _shakerIoctl = CmvadrIoctlInput.Open(VirtualAudioDriverIoctl.ShakerDeviceWin32Path);
         }
 
@@ -124,7 +131,27 @@ public sealed class WasapiDualRouter : IDisposable
         // - Shaker is treated as stereo and distributed by the router
         var music = BuildMusicProvider(_musicBuffer.ToSampleProvider(), _config.SampleRate);
         ISampleProvider shakerStereo;
-        if (_shakerBuffer is not null)
+
+        if (useTelemetryHaptics)
+        {
+            _telemetryShaker = new BstTelemetryHapticsSampleProvider(_config);
+
+            if (_shakerBuffer is not null)
+            {
+                var fallback = BuildStereoProvider(_shakerBuffer.ToSampleProvider(), _config.SampleRate);
+                _autoFallbackShaker = new AutoFallbackShakerSampleProvider(
+                    primary: _telemetryShaker,
+                    fallback: fallback,
+                    primaryHealthy: () => _telemetryShaker.IsReceivingRecently);
+                shakerStereo = _autoFallbackShaker;
+            }
+            else
+            {
+                // No fallback device provided; if telemetry drops, the output goes quiet.
+                shakerStereo = _telemetryShaker;
+            }
+        }
+        else if (_shakerBuffer is not null)
         {
             shakerStereo = BuildStereoProvider(_shakerBuffer.ToSampleProvider(), _config.SampleRate);
         }
@@ -215,6 +242,7 @@ public sealed class WasapiDualRouter : IDisposable
     {
         Stop();
         _output.Dispose();
+        _telemetryShaker?.Dispose();
         _musicCapture?.Dispose();
         _shakerCapture?.Dispose();
         _musicIoctl?.Dispose();

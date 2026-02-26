@@ -17,6 +17,36 @@ public sealed class RouterConfig
     [JsonPropertyName("shakerInputRenderDevice")]
     public string ShakerInputRenderDevice { get; set; } = string.Empty;
 
+    // Optional: generate Shaker audio in-process by consuming the mod's external telemetry stream
+    // (loopback WebSocket server that broadcasts JSON frames).
+    // When enabled, the Shaker stream is synthesized. If ShakerInputRenderDevice is also set,
+    // it becomes the automatic fallback when telemetry is not being received.
+    [JsonPropertyName("telemetryHapticsEnabled")]
+    public bool TelemetryHapticsEnabled { get; set; } = false;
+
+    [JsonPropertyName("telemetryWebSocketHost")]
+    public string TelemetryWebSocketHost { get; set; } = "127.0.0.1";
+
+    [JsonPropertyName("telemetryWebSocketPort")]
+    public int TelemetryWebSocketPort { get; set; } = 7117;
+
+    // Which message types to consume from the mod's JSON broadcast.
+    // - telemetry: continuous (speed/accel/elytra) updates
+    // - event: high-level one-shot events (impact/danger/etc.)
+    // - haptic: low-level synthesis commands (f0/f1/ms/noise/pattern)
+    [JsonPropertyName("telemetryConsumeTelemetry")]
+    public bool TelemetryConsumeTelemetry { get; set; } = true;
+
+    [JsonPropertyName("telemetryConsumeUnifiedEvents")]
+    public bool TelemetryConsumeUnifiedEvents { get; set; } = true;
+
+    [JsonPropertyName("telemetryConsumeHapticCommands")]
+    public bool TelemetryConsumeHapticCommands { get; set; } = false;
+
+    // Additional gain applied only to the synthesized telemetry shaker stream.
+    [JsonPropertyName("telemetryGainDb")]
+    public float TelemetryGainDb { get; set; } = 0.0f;
+
     [JsonPropertyName("outputRenderDevice")]
     public string OutputRenderDevice { get; set; } = string.Empty;
 
@@ -163,6 +193,14 @@ public sealed class RouterConfig
                 throw new InvalidOperationException("musicInputRenderDevice is required");
             if (string.IsNullOrWhiteSpace(OutputRenderDevice))
                 throw new InvalidOperationException("outputRenderDevice is required");
+        }
+
+        if (TelemetryHapticsEnabled)
+        {
+            if (string.IsNullOrWhiteSpace(TelemetryWebSocketHost))
+                throw new InvalidOperationException("telemetryWebSocketHost is required when telemetryHapticsEnabled=true");
+            if (TelemetryWebSocketPort <= 0 || TelemetryWebSocketPort > 65535)
+                throw new InvalidOperationException("telemetryWebSocketPort is out of range (1..65535)");
         }
         if (SampleRate < 8000 || SampleRate > 384000)
             throw new InvalidOperationException("sampleRate is out of range");

@@ -10,6 +10,22 @@
   "musicInputRenderDevice": "Virtual Game Audio",
   "shakerInputRenderDevice": "Virtual Shaker Audio",
 
+  // Optional: generate Shaker audio in-process by consuming the mod's external telemetry WebSocket.
+  // Mod-side settings live in `config/bassshakertelemetry.json`:
+  // - webSocketEnabled (default false)
+  // - webSocketPort (default 7117)
+  // - webSocketSendTelemetry / webSocketSendUnifiedEvents / webSocketSendHapticEvents
+  //
+  // When telemetryHapticsEnabled=true, the router synthesizes the Shaker stream.
+  // If shakerInputRenderDevice is also set, it becomes the automatic fallback when telemetry is not being received.
+  "telemetryHapticsEnabled": false,
+  "telemetryWebSocketHost": "127.0.0.1",
+  "telemetryWebSocketPort": 7117,
+  "telemetryConsumeTelemetry": true,
+  "telemetryConsumeUnifiedEvents": true,
+  "telemetryConsumeHapticCommands": false,
+  "telemetryGainDb": 0.0,
+
   // CM6206-class adapters typically appear as: Speakers (USB Audio Class 1.0 and 2.0 Device Driver)
   "outputRenderDevice": "Speakers (USB Audio Class 1.0 and 2.0 Device Driver)",
   "latencyInputCaptureDevice": null,
