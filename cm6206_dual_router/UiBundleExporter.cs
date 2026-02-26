@@ -2,6 +2,7 @@ using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 using System.Text;
+using System.Text.Json.Nodes;
 
 namespace Cm6206DualRouter;
 
@@ -91,42 +92,10 @@ internal static class UiBundleExporter
 }
 """;
 
-        // Minimal shared UI schema (MVP): Telemetry config screen layout/rows.
+        // Shared UI schema (tree-based): screens -> root panel -> children.
         // The Minecraft mod consumes this as neon/neon_schema.json from the active UI bundle.
-        var schemaJson = """
-{
-  "version": 1,
-  "screens": {
-    "telemetry_config": {
-      "titleKey": "bassshakertelemetry.config.title",
-      "rows": [
-        { "type": "device_button", "id": "outputDevice", "textKey": "bassshakertelemetry.config.output_device", "action": "openOutputDevice" },
-        { "type": "slider", "id": "masterVolume", "textKey": "bassshakertelemetry.config.master_volume", "bind": "masterVolume" },
-        { "type": "button", "id": "advanced", "textKey": "bassshakertelemetry.config.advanced", "action": "openAdvanced" },
-        { "type": "button", "id": "soundscape", "textKey": "bassshakertelemetry.soundscape.open", "action": "openSoundscape" },
-        {
-          "type": "hstack",
-          "gap": 10,
-          "children": [
-            { "type": "toggle", "id": "damage", "textKey": "bassshakertelemetry.config.damage_enabled", "bind": "damageBurstEnabled" },
-            { "type": "toggle", "id": "biome", "textKey": "bassshakertelemetry.config.biome_enabled", "bind": "biomeChimeEnabled" }
-          ]
-        },
-        {
-          "type": "hstack",
-          "gap": 10,
-          "children": [
-            { "type": "toggle", "id": "road", "textKey": "bassshakertelemetry.config.road_enabled", "bind": "roadTextureEnabled" },
-            { "type": "toggle", "id": "sound", "textKey": "bassshakertelemetry.config.sound_enabled", "bind": "soundHapticsEnabled" }
-          ]
-        },
-        { "type": "toggle", "id": "gameplay", "textKey": "bassshakertelemetry.config.gameplay_enabled", "bind": "gameplayHapticsEnabled" },
-        { "type": "toggle", "id": "accessibilityHud", "textKey": "bassshakertelemetry.config.accessibility_hud", "bind": "accessibilityHudEnabled" }
-      ]
-    }
-  }
-}
-""";
+        JsonObject schema = NeonSchemaBuilder.BuildSchema();
+        var schemaJson = NeonSchemaBuilder.ToJson(schema);
 
         File.WriteAllText(stylePath, styleJson, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
         File.WriteAllText(animPath, animJson, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
