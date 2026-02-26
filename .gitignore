@@ -45,6 +45,9 @@ codesign_dev/
 # Generated asset exports
 assets/generated/
 
+# Local build/release artifacts
+artifacts/
+
 # --- Virtual audio driver (SysVAD fork workspace; keep source out of git) ---
 virtual_audio_driver/src/
 virtual_audio_driver/package/
