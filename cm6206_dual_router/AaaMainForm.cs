@@ -4,6 +4,7 @@ using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using NAudio.CoreAudioApi;
@@ -14,6 +15,8 @@ internal sealed class AaaMainForm : Form
 {
     private readonly string _configPath;
     private AaaMainView? _view;
+
+    private UpdateInfo? _availableUpdate;
 
     private readonly Panel _splash;
     private readonly Label _splashText;
@@ -102,6 +105,9 @@ internal sealed class AaaMainForm : Form
             _view.PresetMusic.Click += (_, _) => ApplyPreset("Music");
             _view.PresetCustom.Click += (_, _) => ApplyPreset("Custom");
 
+            // Best-effort update check (non-blocking). AAA UI didn't previously invoke the updater.
+            _ = CheckForUpdatesAfterStartupAsync();
+
             _view.DevicePill.State = PillState.Unknown;
             _view.DevicePill.Text = "Device: (detecting)";
             _view.StatusText.Text = "Status: Loading config...";
@@ -146,6 +152,58 @@ internal sealed class AaaMainForm : Form
             _view.DevicePill.State = PillState.Error;
             _view.DevicePill.Text = "Device: Error";
             _view.StatusText.Text = $"Status: {ex.Message}";
+        }
+    }
+
+    private async Task CheckForUpdatesAfterStartupAsync()
+    {
+        try
+        {
+            await Task.Delay(2500).ConfigureAwait(true);
+            if (IsDisposed)
+                return;
+
+            using var http = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+            var latest = await UpdateChecker.TryGetLatestUpdateAsync(http, CancellationToken.None).ConfigureAwait(true);
+            if (latest is null)
+            {
+                AppLog.Info("Update check: no release info (null)");
+                return;
+            }
+
+            var current = UpdateChecker.GetCurrentVersion();
+            if (!UpdateChecker.IsUpdateAvailable(current, latest.LatestVersion))
+            {
+                AppLog.Info($"Update check: up-to-date (current={current}, latest={latest.LatestVersion} {latest.TagName})");
+                return;
+            }
+
+            _availableUpdate = latest;
+            AppLog.Info($"Update available: current={current}, latest={latest.LatestVersion} ({latest.TagName})");
+
+            var view = _view;
+            if (view is null || view.IsDisposed)
+                return;
+
+            BeginInvoke(new Action(() =>
+            {
+                try
+                {
+                    if (view.IsDisposed)
+                        return;
+
+                    var build = typeof(Program).Assembly.GetName().Version?.ToString() ?? "(unknown)";
+                    view.BuildInfo.Text = $"Build: {build} | Update: {latest.TagName}";
+                }
+                catch
+                {
+                    // ignore
+                }
+            }));
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn($"Update check failed: {ex.Message}");
         }
     }
 
