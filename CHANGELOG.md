@@ -5,6 +5,11 @@
 ### Changed
 - (nothing yet)
 
+## 2026-03-01 (v0.2.3)
+
+### Fixed
+- In-app auto-update now correctly prefers the portable bundle ZIP for portable runs, and launches the installer for installed runs (instead of trying to self-overwrite with the installer EXE).
+
 ## 2026-02-26 (v0.2.2)
 
 ### Changed
