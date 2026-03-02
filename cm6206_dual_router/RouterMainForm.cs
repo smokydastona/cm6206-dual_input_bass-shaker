@@ -242,6 +242,16 @@ public sealed class RouterMainForm : Form
     {
         AppLog.Info("RouterMainForm ctor: begin");
 
+        try
+        {
+            if (AppBranding.TryLoadAppIcon() is { } appIcon)
+                Icon = appIcon;
+        }
+        catch
+        {
+            // ignore
+        }
+
         AppLog.Info("RouterMainForm ctor: init core controls...");
         _mainSplit = new SplitContainer
         {

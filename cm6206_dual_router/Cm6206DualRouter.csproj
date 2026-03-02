@@ -7,6 +7,8 @@
     <LangVersion>latest</LangVersion>
     <UseWindowsForms>true</UseWindowsForms>
 
+    <ApplicationIcon>icon.ico</ApplicationIcon>
+
     <!-- Identity / File Properties (Details tab) -->
     <Authors>SmokyDaStona</Authors>
     <Company>SmokyDaStona</Company>
@@ -27,6 +29,11 @@
 
   <ItemGroup>
     <None Include="router.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="icon.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="icon.ico" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

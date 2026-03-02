@@ -358,8 +358,13 @@ internal sealed class AaaMainView : UserControl
         // Defaults
         try
         {
-            using var icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
-            _appIcon.Image = icon?.ToBitmap();
+            _appIcon.Image = AppBranding.TryLoadAppImage();
+
+            if (_appIcon.Image is null)
+            {
+                using var icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
+                _appIcon.Image = icon?.ToBitmap();
+            }
         }
         catch
         {
@@ -385,8 +390,8 @@ internal sealed class AaaMainView : UserControl
         {
             try
             {
-                var icon = AaaAssets.TryGetPng("icon_device_24x24.png");
                 var bg = AaaAssets.TryGetPng("background_1920x1080.png");
+                var icon = AppBranding.TryLoadAppImage();
 
                 if (IsDisposed) return;
                 BeginInvoke(new Action(() =>

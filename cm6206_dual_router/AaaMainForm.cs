@@ -40,6 +40,16 @@ internal sealed class AaaMainForm : Form
         BackColor = NeonTheme.BgPrimary;
         ForeColor = NeonTheme.TextPrimary;
 
+        try
+        {
+            if (AppBranding.TryLoadAppIcon() is { } appIcon)
+                Icon = appIcon;
+        }
+        catch
+        {
+            // ignore
+        }
+
         // Scalable layout: start near reference resolution but clamp to working area.
         var wa = Screen.PrimaryScreen?.WorkingArea ?? new Rectangle(0, 0, 1600, 900);
         var w = Math.Min(AaaUiMetrics.BaseWidth, wa.Width);
