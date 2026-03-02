@@ -7,8 +7,12 @@
   // Virtual inputs are render endpoints that other apps play to (Voicemeeter / VB-CABLE / etc.).
   // Current implementation: set these to the exact Windows playback device names you want to capture via WASAPI loopback.
   // Planned driver track: these remain the endpoint FriendlyNames, but the router will ingest audio via a driver interface (shared memory / IOCTL).
-  "musicInputRenderDevice": "Virtual Game Audio",
-  "shakerInputRenderDevice": "Virtual Shaker Audio",
+  // Default-first-run: capture from the current Windows default playback device.
+  // If you install the virtual endpoints driver, you can switch this to: "Virtual Game Audio".
+  "musicInputRenderDevice": "Default Game Output",
+
+  // Optional second input. Leave empty to disable unless you have a dedicated endpoint (e.g. "Virtual Shaker Audio").
+  "shakerInputRenderDevice": "",
 
   // Optional: generate Shaker audio in-process by consuming the mod's external telemetry WebSocket.
   // Mod-side settings live in `config/bassshakertelemetry.json`:
