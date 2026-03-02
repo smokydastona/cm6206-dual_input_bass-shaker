@@ -40,6 +40,11 @@ internal static class AppUpdater
                 await resp.Content.CopyToAsync(fs, cancellationToken).ConfigureAwait(false);
             }
 
+            if (IsInstallerExe(assetName))
+            {
+                return TryLaunchInstallerAndExit(owner, downloadPath);
+            }
+
             var stagedExePath = downloadPath;
             if (downloadPath.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
             {
@@ -62,6 +67,17 @@ internal static class AppUpdater
                 TryOpenUrl(info.HtmlUrl);
                 return false;
             }
+            else
+            {
+                // Direct EXE updates are only safe if the asset is the actual app executable.
+                // (Releases often include installer EXEs; those are handled above.)
+                if (!string.Equals(Path.GetFileName(downloadPath), "Cm6206DualRouter.exe", StringComparison.OrdinalIgnoreCase))
+                {
+                    AppLog.Warn($"Refusing to self-replace with unexpected EXE asset: {Path.GetFileName(downloadPath)}");
+                    TryOpenUrl(info.HtmlUrl);
+                    return false;
+                }
+            }
 
             return TryLaunchReplaceAndRelaunch(owner, exePath, stagedExePath);
         }
@@ -78,6 +94,52 @@ internal static class AppUpdater
             }
 
             TryOpenUrl(info.HtmlUrl);
+            return false;
+        }
+    }
+
+    private static bool IsInstallerExe(string assetName)
+        => assetName.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)
+           && (assetName.StartsWith("Cm6206DualRouterSetup_", StringComparison.OrdinalIgnoreCase)
+               || assetName.Contains("setup", StringComparison.OrdinalIgnoreCase));
+
+    private static bool TryLaunchInstallerAndExit(IWin32Window owner, string installerPath)
+    {
+        var result = MessageBox.Show(
+            owner,
+            "A new version is ready. The installer will launch and this app will close.\n\nContinue?",
+            "Update available",
+            MessageBoxButtons.OKCancel,
+            MessageBoxIcon.Information);
+
+        if (result != DialogResult.OK)
+            return false;
+
+        try
+        {
+            // Prefer elevation prompt if needed (Program Files installs).
+            var psi = new ProcessStartInfo
+            {
+                FileName = installerPath,
+                UseShellExecute = true,
+                Verb = "runas"
+            };
+
+            Process.Start(psi);
+            Application.Exit();
+            return true;
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error("Failed to launch installer", ex);
+            try
+            {
+                MessageBox.Show(owner, ex.Message, "Update failed", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            catch
+            {
+                // ignore
+            }
             return false;
         }
     }

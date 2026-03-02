@@ -23,6 +23,9 @@ internal static class UpdateChecker
         => latest > current;
 
     public static async Task<UpdateInfo?> TryGetLatestUpdateAsync(HttpClient http, CancellationToken cancellationToken)
+        => await TryGetLatestUpdateAsync(http, Environment.ProcessPath, cancellationToken).ConfigureAwait(false);
+
+    public static async Task<UpdateInfo?> TryGetLatestUpdateAsync(HttpClient http, string? currentExePath, CancellationToken cancellationToken)
     {
         try
         {
@@ -71,10 +74,29 @@ internal static class UpdateChecker
                     return (name, dl);
                 }).Where(x => !string.IsNullOrWhiteSpace(x.name) && !string.IsNullOrWhiteSpace(x.dl)).ToList();
 
-                // Prefer a direct .exe; fall back to .zip
-                var exe = assets.FirstOrDefault(a => a.name!.EndsWith(".exe", StringComparison.OrdinalIgnoreCase));
-                var zip = assets.FirstOrDefault(a => a.name!.EndsWith(".zip", StringComparison.OrdinalIgnoreCase));
-                var chosen = exe.name is not null ? exe : zip;
+                // Important: GitHub releases often include an installer EXE (Inno Setup) plus a portable ZIP.
+                // The in-app updater can only safely self-replace with a *portable* app EXE/ZIP.
+                // If the app is installed under Program Files (not writable), prefer the installer.
+                var installKind = GuessInstallKind(currentExePath);
+
+                var installerExe = assets.FirstOrDefault(a => IsInstallerExeName(a.name!));
+                var portableExe = assets.FirstOrDefault(a => string.Equals(a.name, "Cm6206DualRouter.exe", StringComparison.OrdinalIgnoreCase));
+                var portableZip = assets.FirstOrDefault(a => IsPortableBundleZipName(a.name!));
+
+                (string? name, string? dl) chosen;
+                if (installKind == InstallKind.Installed)
+                {
+                    chosen = installerExe.name is not null ? installerExe
+                        : portableZip.name is not null ? portableZip
+                        : portableExe;
+                }
+                else
+                {
+                    chosen = portableExe.name is not null ? portableExe
+                        : portableZip.name is not null ? portableZip
+                        : default;
+                }
+
                 if (chosen.name is not null && chosen.dl is not null)
                 {
                     assetName = chosen.name;
@@ -95,6 +117,59 @@ internal static class UpdateChecker
             AppLog.Warn($"Update check error: {ex.Message}");
             return null;
         }
+    }
+
+    private enum InstallKind
+    {
+        Portable,
+        Installed
+    }
+
+    private static InstallKind GuessInstallKind(string? exePath)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(exePath))
+                return InstallKind.Portable;
+
+            var full = Path.GetFullPath(exePath);
+            var programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+            var programFilesX86 = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86);
+
+            if (!string.IsNullOrWhiteSpace(programFiles) && full.StartsWith(programFiles, StringComparison.OrdinalIgnoreCase))
+                return InstallKind.Installed;
+            if (!string.IsNullOrWhiteSpace(programFilesX86) && full.StartsWith(programFilesX86, StringComparison.OrdinalIgnoreCase))
+                return InstallKind.Installed;
+
+            return InstallKind.Portable;
+        }
+        catch
+        {
+            return InstallKind.Portable;
+        }
+    }
+
+    private static bool IsInstallerExeName(string name)
+    {
+        if (!name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        // Examples: Cm6206DualRouterSetup_0.2.2.exe, Cm6206DualRouterSetup_0.2.2-hotfix1.exe
+        return name.StartsWith("Cm6206DualRouterSetup_", StringComparison.OrdinalIgnoreCase)
+               || name.Contains("setup", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsPortableBundleZipName(string name)
+    {
+        if (!name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        // Avoid accidentally selecting unrelated zips (like the Minecraft UI bundle).
+        if (name.Contains("neon_ui_bundle", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        return name.Contains("dual_router_bundle", StringComparison.OrdinalIgnoreCase)
+               || name.Contains("cm6206_dual_router_bundle", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string NormalizeTo4Part(string versionText)
